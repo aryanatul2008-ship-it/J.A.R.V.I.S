@@ -67,14 +67,14 @@ router.post('/api/drive/upload', requireAuth, (req, res, next) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({
-          error: 'File too large',
-          code: 'file_too_large',
-          message: 'File exceeds the 50 MB demo limit.'
+          error: 'File exceeds 50 MB limit',
+          code: 'validation',
+          message: 'File exceeds the 50 MB limit.'
         });
       }
       return res.status(400).json({
         error: 'Upload failed',
-        code: 'upload_error',
+        code: 'validation',
         message: err.message
       });
     }
@@ -82,7 +82,7 @@ router.post('/api/drive/upload', requireAuth, (req, res, next) => {
     if (!req.file) {
       return res.status(400).json({
         error: 'No file provided',
-        code: 'missing_file',
+        code: 'validation',
         message: 'Please choose a document to upload.'
       });
     }

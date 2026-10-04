@@ -230,15 +230,25 @@ function renderStepError(id, summary, code, message) {
   }
 
   stepEl.className = 'step-line error';
-  const errText = message || summary || 'Operation failed';
-  const authBtn = code === 'auth_expired'
-    ? '<a href="/auth/google" class="b auth-btn inline-auth-btn">Reconnect Google</a>'
-    : '';
+
+  const friendly = window.getFriendlyError ? window.getFriendlyError(code, message || summary) : {
+    title: 'ERROR',
+    message: message || summary || 'Operation failed',
+    action: 'Try again',
+    actionType: 'retry'
+  };
+
+  let actionHtml = '';
+  if (code === 'auth_expired' || friendly.actionType === 'reconnect_google') {
+    actionHtml = '<a href="/auth/google" class="b auth-btn inline-auth-btn">Reconnect Google</a>';
+  } else if (friendly.action) {
+    actionHtml = `<span style="color: var(--warn); font-size: 11px; margin-left: 6px;">[${esc(friendly.action)}]</span>`;
+  }
 
   stepEl.innerHTML = `
     <span class="step-icon">✕</span>
-    <span class="step-summary">${esc(errText)}</span>
-    ${authBtn}
+    <span class="step-summary"><b>${esc(friendly.title)}:</b> ${esc(friendly.message)}</span>
+    ${actionHtml}
   `;
 
   if (code === 'auth_expired') {
@@ -330,7 +340,16 @@ function handleEvent(event, userCommandText) {
     chatHistory.push({ role: 'model', text: event.text });
     addMessage('j', formatMessage(event.text));
   } else if (event.type === 'error') {
-    addMessage('e', `⚠ ${esc(event.message || 'An error occurred')}`);
+    const friendly = window.getFriendlyError ? window.getFriendlyError(event.code, event.message) : {
+      title: 'ERROR',
+      message: event.message || 'An error occurred',
+      action: 'Try again'
+    };
+    const actionHtml = (event.code === 'auth_expired' || friendly.actionType === 'reconnect_google')
+      ? '<a href="/auth/google" class="b auth-btn inline-auth-btn" style="margin-left: 8px;">Reconnect Google</a>'
+      : (friendly.action ? ` &bull; <i>Suggestion: ${esc(friendly.action)}</i>` : '');
+
+    addMessage('e', `⚠ <b>${esc(friendly.title)}:</b> ${esc(friendly.message)}${actionHtml}`);
   }
 }
 

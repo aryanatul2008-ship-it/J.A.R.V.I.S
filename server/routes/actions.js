@@ -11,6 +11,38 @@ const telegramService = require('../services/telegram');
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * GET /api/actions/pending
+ * Retrieve active pending actions awaiting user confirmation (within 15 minutes limit).
+ */
+router.get('/api/actions/pending', requireAuth, async (req, res, next) => {
+  const userId = req.session.userId;
+  try {
+    const result = await db.query(
+      `SELECT id, tool, args, summary, status, created_at
+       FROM pending_actions
+       WHERE user_id = $1
+         AND status = 'pending'
+         AND created_at >= NOW() - INTERVAL '15 minutes'
+       ORDER BY created_at ASC`,
+      [userId]
+    );
+
+    const pending = result.rows.map(row => ({
+      id: row.id,
+      tool: row.tool,
+      args: typeof row.args === 'string' ? JSON.parse(row.args) : row.args,
+      summary: row.summary,
+      status: row.status,
+      createdAt: row.created_at
+    }));
+
+    res.json({ pending });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/actions/:id/confirm
  * Verify and execute pending action within 15 minutes of creation. Idempotent.
  */
@@ -56,13 +88,13 @@ router.post('/api/actions/:id/confirm', requireAuth, async (req, res, next) => {
       if (existing.status !== 'pending') {
         return res.status(400).json({
           error: `Action is already ${existing.status}`,
-          code: 'already_processed'
+          code: 'validation'
         });
       }
 
       return res.status(400).json({
         error: 'Pending action has expired (exceeded 15 minutes limit)',
-        code: 'expired'
+        code: 'validation'
       });
     }
 
@@ -135,7 +167,7 @@ router.post('/api/actions/:id/cancel', requireAuth, async (req, res, next) => {
       const existing = checkRes.rows[0];
       return res.status(400).json({
         error: `Action is already ${existing.status}`,
-        code: 'already_processed'
+        code: 'validation'
       });
     }
 

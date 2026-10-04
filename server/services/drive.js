@@ -32,6 +32,13 @@ function handleGoogleError(err) {
     throw permErr;
   }
 
+  if (status === 404 || errMsg.includes('not found')) {
+    const notFoundErr = new Error(err.message || 'The requested folder or file was not found in Google Drive.');
+    notFoundErr.code = 'not_found';
+    notFoundErr.status = 404;
+    throw notFoundErr;
+  }
+
   if (status >= 500 || ['ECONNRESET', 'ENOTFOUND', 'ETIMEDOUT'].includes(err.code)) {
     const unavailErr = new Error('Google Drive service is temporarily unavailable.');
     unavailErr.code = 'integration_unavailable';

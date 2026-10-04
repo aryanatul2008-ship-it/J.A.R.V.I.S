@@ -13,6 +13,7 @@ const PREVIEW_TABS = [
 const previewState = {
   activeTab: 'cal',
   loading: false,
+  historyFilter: 'all', // 'all' | 'failed'
   lastNewEventId: null,
   lastNewReminderId: null,
   lastNewCommsId: null,
@@ -89,6 +90,8 @@ function switchTab(tabKey) {
     refreshDrive();
   } else if (tabKey === 'comms') {
     refreshComms();
+  } else if (tabKey === 'hist') {
+    refreshHistory();
   }
 }
 
@@ -240,6 +243,24 @@ async function refreshComms(newId = null) {
   } finally {
     previewState.loading = false;
     if (previewState.activeTab === 'comms') {
+      renderView();
+    }
+  }
+}
+
+/**
+ * Fetch and refresh action execution history from the server.
+ */
+async function refreshHistory() {
+  try {
+    previewState.loading = true;
+    const res = await window.api.get('/api/history?limit=50');
+    previewState.data.hist = (res && res.history) || [];
+  } catch (err) {
+    console.warn('[HISTORY] Unable to refresh history:', err.message);
+  } finally {
+    previewState.loading = false;
+    if (previewState.activeTab === 'hist') {
       renderView();
     }
   }
@@ -518,6 +539,69 @@ function renderCommsView(contacts, comms) {
   return html;
 }
 
+const TOOL_LABELS = {
+  create_calendar_event: 'CALENDAR',
+  list_calendar_events: 'CALENDAR',
+  create_reminder: 'REMINDER',
+  list_reminders: 'REMINDER',
+  search_drive: 'DRIVE',
+  request_file_upload: 'DRIVE UPLOAD',
+  send_telegram_message: 'TELEGRAM'
+};
+
+/**
+ * Render action_log execution history with status badges, failure details, and All/Failed filter.
+ * @param {Array} history
+ */
+function renderHistoryView(history = []) {
+  const filter = previewState.historyFilter || 'all';
+  const allItems = Array.isArray(history) ? history : [];
+  const failedItems = allItems.filter((item) => (item.status || '').toLowerCase() === 'failed');
+  const items = filter === 'failed' ? failedItems : allItems;
+
+  let html = `
+    <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+      <button class="b ${filter === 'all' ? '' : 'alt'}" data-history-filter="all" style="margin: 0; padding: 4px 12px; font-size: 11px;">ALL (${allItems.length})</button>
+      <button class="b ${filter === 'failed' ? '' : 'alt'}" data-history-filter="failed" style="margin: 0; padding: 4px 12px; font-size: 11px;">FAILED (${failedItems.length})</button>
+    </div>
+  `;
+
+  if (items.length === 0) {
+    html += `<div class="empty">${filter === 'failed' ? 'No failed actions recorded.' : 'No action history recorded yet.'}</div>`;
+    return html;
+  }
+
+  items.forEach((item) => {
+    const createdDate = new Date(item.created_at);
+    const timeStr = isNaN(createdDate.getTime()) ? '' : fmtTime(createdDate);
+    const dayStr = isNaN(createdDate.getTime()) ? '' : fmtDay(createdDate);
+    const toolLabel = TOOL_LABELS[item.tool] || (item.tool || 'ACTION').toUpperCase();
+
+    let tagClass = '';
+    const status = (item.status || 'success').toLowerCase();
+    if (status === 'failed') {
+      tagClass = 'bad';
+    } else if (status === 'cancelled') {
+      tagClass = 'bad';
+    } else if (status === 'pending') {
+      tagClass = 'r';
+    }
+
+    html += `
+      <div class="row">
+        <span class="tag ${tagClass}">${esc(status.toUpperCase())}</span>
+        <b>${esc(item.summary || toolLabel)}</b>
+        <span>${esc(timeStr)}</span>
+        <small>
+          [${esc(toolLabel)}] ${esc(dayStr)}${item.error ? ` · <span style="color: var(--err); font-weight: 500;">⚠ ${esc(item.error)}</span>` : ''}
+        </small>
+      </div>
+    `;
+  });
+
+  return html;
+}
+
 /**
  * Render the content for the currently active tab.
  */
@@ -547,6 +631,11 @@ function renderView() {
 
   if (currentTab === 'comms') {
     viewEl.innerHTML = renderCommsView(previewState.data.contacts, previewState.data.comms);
+    return;
+  }
+
+  if (currentTab === 'hist') {
+    viewEl.innerHTML = renderHistoryView(previewState.data.hist);
     return;
   }
 
@@ -786,10 +875,20 @@ document.addEventListener('drop', (e) => {
   }
 });
 
+// Handle history filter button clicks
+document.addEventListener('click', (e) => {
+  const filterBtn = e.target.closest('button[data-history-filter]');
+  if (filterBtn) {
+    previewState.historyFilter = filterBtn.dataset.historyFilter;
+    renderView();
+  }
+});
+
 window.refreshCalendar = refreshCalendar;
 window.refreshReminders = refreshReminders;
 window.refreshDrive = refreshDrive;
 window.refreshComms = refreshComms;
+window.refreshHistory = refreshHistory;
 window.showDriveSearchResults = showDriveSearchResults;
 window.searchDrive = searchDrive;
 window.preview = {
@@ -807,8 +906,10 @@ window.preview = {
   refreshReminders,
   refreshDrive,
   refreshComms,
+  refreshHistory,
   showDriveSearchResults,
   searchDrive,
   getActiveTab: () => previewState.activeTab
 };
+
 

@@ -110,6 +110,14 @@ app.use(actionsRoutes);
 const { router: eventsRouter } = require('./routes/events');
 app.use(eventsRouter);
 
+// Action history routes
+const historyRoutes = require('./routes/history');
+app.use(historyRoutes);
+
+// Integration status routes
+const statusRoutes = require('./routes/status');
+app.use(statusRoutes);
+
 // Auth status endpoint for client bootstrapping
 app.get('/api/auth/status', (req, res) => {
   if (req.session && req.session.userId) {

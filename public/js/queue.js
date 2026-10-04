@@ -122,6 +122,14 @@ async function runCommand(text) {
         window.chat.setStatus('online');
       }
     }
+
+    // Refresh live integration states and action history after each command
+    if (window.refreshStatus) {
+      window.refreshStatus();
+    }
+    if (window.refreshHistory && window.preview && window.preview.getActiveTab() === 'hist') {
+      window.refreshHistory();
+    }
   }
 }
 

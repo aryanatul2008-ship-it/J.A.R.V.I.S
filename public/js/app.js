@@ -141,6 +141,10 @@ async function checkAuth() {
       window.refreshComms();
     }
 
+    // Refresh integration status and restore any pending confirmation cards
+    refreshStatus();
+    restorePendingActions();
+
     // Sync browser timezone with user profile
     const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (browserTimezone && browserTimezone !== user.timezone) {
@@ -154,19 +158,103 @@ async function checkAuth() {
   }
 }
 
+let integrationStatus = {
+  calendar: 'unknown',
+  drive: 'unknown',
+  telegram: 'unknown',
+  ai: 'unknown'
+};
+
 /**
- * Render integration status chips as "unknown".
+ * Fetch live integration health status from GET /api/status.
+ */
+async function refreshStatus() {
+  if (!currentUser) return;
+
+  try {
+    const res = await window.api.get('/api/status');
+    if (res) {
+      integrationStatus = {
+        calendar: res.calendar || 'unavailable',
+        drive: res.drive || 'unavailable',
+        telegram: res.telegram || 'unavailable',
+        ai: res.ai || 'unavailable'
+      };
+      renderIntegrations();
+
+      // Show reconnect banner if authorization expired on Google services
+      if (res.calendar === 'auth_expired' || res.drive === 'auth_expired') {
+        const banner = document.querySelector('#auth-expired-banner');
+        if (banner) banner.style.display = 'flex';
+      }
+    }
+  } catch (err) {
+    console.warn('[STATUS] Could not refresh integration status:', err.message);
+  }
+}
+
+/**
+ * Render integration status chips with live state and failure reasons.
  */
 function renderIntegrations() {
   const integ = document.querySelector('#integ');
   if (!integ) return;
 
+  const renderChip = (key, label, state) => {
+    let cls = '';
+    let statusText = 'ONLINE';
+
+    if (state === 'online') {
+      cls = '';
+      statusText = 'ONLINE';
+    } else if (state === 'auth_expired') {
+      cls = 'off';
+      statusText = 'AUTH EXPIRED';
+    } else if (state === 'unavailable') {
+      cls = 'off';
+      statusText = 'UNAVAILABLE';
+    } else {
+      cls = 'unknown';
+      statusText = 'UNKNOWN';
+    }
+
+    const isAuth = state === 'auth_expired';
+    return `<button class="chip ${cls}" data-k="${key}" ${isAuth ? 'data-action="reconnect"' : ''} title="${isAuth ? 'Google authorization expired. Click to reconnect.' : ''}"><i></i>${label} · ${statusText}</button>`;
+  };
+
   integ.innerHTML = `
-    <button class="chip unknown" data-k="cal"><i></i>CALENDAR · UNKNOWN</button>
-    <button class="chip unknown" data-k="drive"><i></i>DRIVE · UNKNOWN</button>
-    <button class="chip unknown" data-k="tg"><i></i>TELEGRAM · UNKNOWN</button>
-    <span class="hint">Service link states (live status synced from server)</span>
+    ${renderChip('cal', 'CALENDAR', integrationStatus.calendar)}
+    ${renderChip('drive', 'DRIVE', integrationStatus.drive)}
+    ${renderChip('tg', 'TELEGRAM', integrationStatus.telegram)}
+    ${renderChip('ai', 'AI CORE', integrationStatus.ai)}
+    <span class="hint">Service link states (synced live)</span>
   `;
+}
+
+/**
+ * Safety net: restore pending confirmation cards across page reloads.
+ */
+async function restorePendingActions() {
+  try {
+    const res = await window.api.get('/api/actions/pending');
+    const pendingList = (res && res.pending) || [];
+    pendingList.forEach((action) => {
+      // Avoid duplicate confirmation cards
+      if (document.querySelector(`#action-card-${action.id}`)) {
+        return;
+      }
+
+      const args = typeof action.args === 'string' ? JSON.parse(action.args) : (action.args || {});
+      const recipient = args.recipient || 'Contact';
+      const message = args.message || '';
+
+      if (window.chat && window.chat.renderConfirmationCard) {
+        window.chat.renderConfirmationCard(action.id, recipient, message);
+      }
+    });
+  } catch (err) {
+    console.warn('[PENDING ACTIONS] Could not restore pending confirmations:', err.message);
+  }
 }
 
 /**
@@ -292,6 +380,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Handle clicking reconnect on integration chips
+  const integEl = document.querySelector('#integ');
+  if (integEl) {
+    integEl.addEventListener('click', (e) => {
+      const chip = e.target.closest('button.chip');
+      if (chip && chip.dataset.action === 'reconnect') {
+        window.location.href = '/auth/google';
+      }
+    });
+  }
+
+  // Poll integration status every 60 seconds
+  setInterval(refreshStatus, 60000);
+
   // Initial welcome message in console
   window.chat.addMessage('j', 'Stark Command Centre online. Awaiting your command.');
 
@@ -300,3 +402,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.setAuthState = setAuthState;
+window.refreshStatus = refreshStatus;
+window.restorePendingActions = restorePendingActions;
