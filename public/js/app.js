@@ -93,6 +93,7 @@ function setAuthState(isLoggedIn, user = null) {
   const authBanner = document.querySelector('#auth-expired-banner');
 
   currentUser = user;
+  window.currentUser = user;
 
   if (isLoggedIn) {
     if (authView) authView.style.display = 'none';
@@ -100,6 +101,9 @@ function setAuthState(isLoggedIn, user = null) {
     if (userProfile) userProfile.style.display = 'flex';
     if (userNameEl && user) {
       userNameEl.textContent = user.name || user.email || 'Tony Stark';
+    }
+    if (window.preview && window.preview.setUserInfo) {
+      window.preview.setUserInfo(user);
     }
     initEventSource();
   } else {
@@ -132,6 +136,9 @@ async function checkAuth() {
     }
     if (window.refreshReminders) {
       window.refreshReminders();
+    }
+    if (window.refreshComms) {
+      window.refreshComms();
     }
 
     // Sync browser timezone with user profile

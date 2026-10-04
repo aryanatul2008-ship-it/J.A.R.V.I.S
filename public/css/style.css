@@ -703,6 +703,84 @@ button, a.b {
   filter: drop-shadow(0 0 8px rgba(245,197,66,.45));
 }
 
+/* Telegram Comms & Contacts Section */
+.comms-invite-box {
+  background: rgba(4, 28, 38, 0.6);
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.contact-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  margin-bottom: 6px;
+  align-items: center;
+  background: rgba(1, 14, 20, 0.4);
+}
+
+.contact-row.editing {
+  grid-template-columns: 1fr;
+  background: rgba(6, 40, 51, 0.6);
+  border-color: var(--g);
+}
+
+.contact-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contact-edit-inputs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.contact-edit-inputs input {
+  flex: 1;
+  min-width: 140px;
+  background: #010a0e;
+  border: 1px solid var(--line);
+  color: var(--bone);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.contact-edit-inputs input:focus {
+  outline: none;
+  border-color: var(--g);
+}
+
+.contact-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.contact-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.contact-btn:hover {
+  border-color: var(--g);
+  color: var(--g);
+}
+
+.contact-btn.del:hover {
+  border-color: var(--err);
+  color: var(--err);
+}
+
 /* Responsiveness */
 @media (max-width: 860px) {
   .grid {

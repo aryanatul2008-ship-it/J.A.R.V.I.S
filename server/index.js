@@ -94,6 +94,10 @@ app.use(remindersRoutes);
 const driveRoutes = require('./routes/drive');
 app.use(driveRoutes);
 
+// Telegram contacts and transmission routes
+const telegramRoutes = require('./routes/telegram');
+app.use(telegramRoutes);
+
 // Live Server-Sent Events stream
 const { router: eventsRouter } = require('./routes/events');
 app.use(eventsRouter);
@@ -112,13 +116,15 @@ app.use('/api', notFoundHandler);
 // Centralized error handling middleware
 app.use(errorHandler);
 
-// Initialize background scheduler
+// Background services
 const scheduler = require('./services/scheduler');
+const telegramService = require('./services/telegram');
 
 // Initialize database schema and listen
 async function startServer() {
   try {
     await db.init();
+    telegramService.init();
     scheduler.init();
     app.listen(config.PORT, () => {
       console.log(`[J.A.R.V.I.S] Stark Command Centre server online at http://localhost:${config.PORT}`);

@@ -168,7 +168,9 @@ router.get('/api/me', requireAuth, async (req, res, next) => {
       email: u.email,
       timezone: u.timezone || 'UTC',
       telegramLinked: Boolean(u.telegram_chat_id),
-      inviteLink: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?start=${u.invite_code}`
+      inviteCode: u.invite_code,
+      inviteLink: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?start=${u.invite_code}`,
+      selfInviteLink: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?start=self_${u.invite_code}`
     });
   } catch (err) {
     next(err);

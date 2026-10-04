@@ -61,6 +61,20 @@ const api = {
       },
       body: JSON.stringify(body)
     });
+  },
+
+  patch(url, body) {
+    return this.request(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  },
+
+  delete(url) {
+    return this.request(url, { method: 'DELETE' });
   }
 };
 

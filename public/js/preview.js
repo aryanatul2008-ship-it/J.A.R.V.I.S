@@ -15,10 +15,14 @@ const previewState = {
   loading: false,
   lastNewEventId: null,
   lastNewReminderId: null,
+  lastNewCommsId: null,
+  editingContactId: null,
+  userInfo: null,
   data: {
     cal: [],
     rem: [],
     drive: [],
+    contacts: [],
     comms: [],
     hist: []
   }
@@ -83,6 +87,8 @@ function switchTab(tabKey) {
     refreshReminders();
   } else if (tabKey === 'drive') {
     refreshDrive();
+  } else if (tabKey === 'comms') {
+    refreshComms();
   }
 }
 
@@ -174,6 +180,34 @@ async function refreshDrive(folderId = null) {
     }
     if (window.upload && window.upload.loadDestinationFolders) {
       window.upload.loadDestinationFolders();
+    }
+  }
+}
+
+/**
+ * Fetch and refresh Telegram contacts and comms history from the server.
+ * @param {string|number} [newId] - Optional ID of newly added comms message to flash in UI
+ */
+async function refreshComms(newId = null) {
+  if (newId) {
+    previewState.lastNewCommsId = newId;
+  }
+
+  try {
+    previewState.loading = true;
+    const [contactsRes, commsRes] = await Promise.all([
+      window.api.get('/api/contacts').catch(() => []),
+      window.api.get('/api/comms').catch(() => [])
+    ]);
+
+    previewState.data.contacts = Array.isArray(contactsRes) ? contactsRes : [];
+    previewState.data.comms = Array.isArray(commsRes) ? commsRes : [];
+  } catch (err) {
+    console.warn('[COMMS] Unable to refresh comms:', err.message);
+  } finally {
+    previewState.loading = false;
+    if (previewState.activeTab === 'comms') {
+      renderView();
     }
   }
 }
@@ -337,6 +371,121 @@ function renderDriveView(files) {
 }
 
 /**
+ * Render Telegram contacts with inline editing and transmission history.
+ * @param {Array} contacts
+ * @param {Array} comms
+ */
+function renderCommsView(contacts, comms) {
+  let html = '';
+  const user = previewState.userInfo || window.currentUser || {};
+  const inviteLink = user.inviteLink || (user.inviteCode ? `https://t.me/zesty_jarvis_bot?start=${user.inviteCode}` : '');
+  const selfInviteLink = user.selfInviteLink || (user.inviteCode ? `https://t.me/zesty_jarvis_bot?start=self_${user.inviteCode}` : '');
+
+  // 1. Contacts Section Header
+  html += '<div class="fold">▸ CONTACTS & TELEGRAM LINKING</div>';
+
+  // 2. Invite Link & Bot Linking Controls
+  html += `
+    <div class="comms-invite-box">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+        <span style="font-size: 11px; color: var(--dim); font-weight: 700; letter-spacing: 0.1em;">INVITE CONTACTS TO JARVIS:</span>
+        <span class="tag ${user.telegramLinked ? '' : 'r'}">${user.telegramLinked ? 'REMINDERS LINKED' : 'REMINDERS UNLINKED'}</span>
+      </div>
+      <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+        <input type="text" readonly value="${esc(inviteLink)}" id="comms-invite-input" class="drive-input" style="flex: 1; font-size: 11px;" placeholder="Invite link available after sign-in">
+        <button class="b" id="comms-copy-btn" style="margin: 0; padding: 5px 12px; font-size: 11px;">Copy Link</button>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        ${selfInviteLink ? `<a href="${esc(selfInviteLink)}" target="_blank" rel="noopener noreferrer" class="b alt" style="margin: 0; padding: 4px 12px; font-size: 11px; text-decoration: none;">Link my Telegram for reminders</a>` : ''}
+        <span style="color: var(--dim); font-size: 11px;">Recipients must open your invite link once to start chat.</span>
+      </div>
+    </div>
+  `;
+
+  // 3. Contacts Rows (with inline editing)
+  if (!contacts || contacts.length === 0) {
+    html += '<div class="empty" style="padding: 16px 10px; margin-bottom: 12px;">No contacts connected yet. Share your invite link above.</div>';
+  } else {
+    contacts.forEach((c) => {
+      const isEditing = previewState.editingContactId === c.id;
+      const aliasesList = Array.isArray(c.aliases) ? c.aliases : [];
+      const aliasesStr = aliasesList.join(', ');
+
+      if (isEditing) {
+        html += `
+          <div class="contact-row editing" id="contact-row-${c.id}">
+            <div class="contact-edit-form">
+              <span style="font-size: 11px; color: var(--gold); font-weight: 700;">EDIT CONTACT</span>
+              <div class="contact-edit-inputs">
+                <input id="contact-edit-name-${c.id}" value="${esc(c.name)}" placeholder="Contact name…">
+                <input id="contact-edit-aliases-${c.id}" value="${esc(aliasesStr)}" placeholder="Aliases (comma-separated, e.g. Bruce, Hulk)…">
+              </div>
+              <div style="display: flex; gap: 6px; margin-top: 4px;">
+                <button class="b" data-save-contact="${c.id}" style="margin: 0; padding: 3px 10px; font-size: 11px;">Save</button>
+                <button class="b alt" data-cancel-contact="${c.id}" style="margin: 0; padding: 3px 10px; font-size: 11px;">Cancel</button>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="contact-row" id="contact-row-${c.id}">
+            <span class="tag">CONTACT</span>
+            <div>
+              <b>${esc(c.name)}</b>
+              <div style="font-size: 11px; color: var(--dim); margin-top: 2px;">
+                Aliases: ${aliasesList.length > 0 ? `<span style="color: var(--bone);">${esc(aliasesStr)}</span>` : '<em style="color: var(--dim);">None</em>'}
+              </div>
+            </div>
+            <div class="contact-actions">
+              <button class="contact-btn" data-edit-contact="${c.id}">Edit</button>
+              <button class="contact-btn del" data-delete-contact="${c.id}">Delete</button>
+            </div>
+          </div>
+        `;
+      }
+    });
+  }
+
+  // 4. Transmission History Header
+  html += '<div class="fold" style="margin-top: 18px;">▸ TRANSMISSION HISTORY</div>';
+
+  // 5. Comms History Rows
+  if (!comms || comms.length === 0) {
+    html += '<div class="empty">No messages sent yet.</div>';
+  } else {
+    comms.forEach((m) => {
+      const createdDate = new Date(m.created_at);
+      const timeStr = isNaN(createdDate.getTime()) ? '' : fmtTime(createdDate);
+      const isNew = previewState.lastNewCommsId && String(previewState.lastNewCommsId) === String(m.id);
+
+      let tagClass = '';
+      let statusText = (m.status || 'sent').toUpperCase();
+      if (m.status === 'sent') {
+        tagClass = '';
+      } else if (m.status === 'failed') {
+        tagClass = 'bad';
+      } else if (m.status === 'cancelled') {
+        tagClass = 'bad';
+      }
+
+      html += `
+        <div class="row${isNew ? ' new' : ''}">
+          <span class="tag ${tagClass}">${esc(statusText)}</span>
+          <b>To ${esc(m.recipient_name)}</b>
+          <span>${esc(timeStr)}</span>
+          <small>
+            “${esc(m.body)}” · ${esc(statusText)} · sent by JARVIS${m.error ? ` · <span style="color: var(--err);">${esc(m.error)}</span>` : ''}
+          </small>
+        </div>
+      `;
+    });
+  }
+
+  return html;
+}
+
+/**
  * Render the content for the currently active tab.
  */
 function renderView() {
@@ -360,6 +509,11 @@ function renderView() {
     if (window.upload && window.upload.loadDestinationFolders) {
       window.upload.loadDestinationFolders();
     }
+    return;
+  }
+
+  if (currentTab === 'comms') {
+    viewEl.innerHTML = renderCommsView(previewState.data.contacts, previewState.data.comms);
     return;
   }
 
@@ -456,6 +610,103 @@ document.addEventListener('click', async (e) => {
     refreshDrive();
     return;
   }
+
+  // Copy invite link
+  const copyBtn = e.target.closest('#comms-copy-btn');
+  if (copyBtn) {
+    const input = document.querySelector('#comms-invite-input');
+    if (input && input.value) {
+      navigator.clipboard.writeText(input.value).then(() => {
+        if (window.chat && window.chat.showToast) {
+          window.chat.showToast('Invite link copied to clipboard');
+        }
+      }).catch(() => {
+        input.select();
+        document.execCommand('copy');
+        if (window.chat && window.chat.showToast) {
+          window.chat.showToast('Invite link copied');
+        }
+      });
+    }
+    return;
+  }
+
+  // Edit contact
+  const editContactBtn = e.target.closest('button[data-edit-contact]');
+  if (editContactBtn) {
+    const cId = parseInt(editContactBtn.dataset.editContact, 10);
+    previewState.editingContactId = cId;
+    renderView();
+    return;
+  }
+
+  // Cancel edit contact
+  const cancelContactBtn = e.target.closest('button[data-cancel-contact]');
+  if (cancelContactBtn) {
+    previewState.editingContactId = null;
+    renderView();
+    return;
+  }
+
+  // Save contact edit
+  const saveContactBtn = e.target.closest('button[data-save-contact]');
+  if (saveContactBtn) {
+    const cId = parseInt(saveContactBtn.dataset.saveContact, 10);
+    const nameInput = document.querySelector(`#contact-edit-name-${cId}`);
+    const aliasesInput = document.querySelector(`#contact-edit-aliases-${cId}`);
+
+    const name = nameInput ? nameInput.value.trim() : '';
+    const aliasesRaw = aliasesInput ? aliasesInput.value.trim() : '';
+    const aliases = aliasesRaw ? aliasesRaw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+
+    if (!name) {
+      if (window.chat && window.chat.showToast) {
+        window.chat.showToast('Name cannot be empty');
+      }
+      return;
+    }
+
+    saveContactBtn.disabled = true;
+    try {
+      await window.api.patch(`/api/contacts/${cId}`, { name, aliases });
+      previewState.editingContactId = null;
+      if (window.chat && window.chat.showToast) {
+        window.chat.showToast('Contact updated');
+      }
+      refreshComms();
+    } catch (err) {
+      console.error('Failed to update contact:', err);
+      if (window.chat && window.chat.showToast) {
+        window.chat.showToast(`Error: ${err.message}`);
+      }
+      saveContactBtn.disabled = false;
+    }
+    return;
+  }
+
+  // Delete contact
+  const deleteContactBtn = e.target.closest('button[data-delete-contact]');
+  if (deleteContactBtn) {
+    const cId = parseInt(deleteContactBtn.dataset.deleteContact, 10);
+    if (!confirm('Are you sure you want to remove this contact?')) {
+      return;
+    }
+    deleteContactBtn.disabled = true;
+    try {
+      await window.api.delete(`/api/contacts/${cId}`);
+      if (window.chat && window.chat.showToast) {
+        window.chat.showToast('Contact removed');
+      }
+      refreshComms();
+    } catch (err) {
+      console.error('Failed to delete contact:', err);
+      if (window.chat && window.chat.showToast) {
+        window.chat.showToast(`Error: ${err.message}`);
+      }
+      deleteContactBtn.disabled = false;
+    }
+    return;
+  }
 });
 
 // Drive search input Enter key handler
@@ -505,13 +756,21 @@ document.addEventListener('drop', (e) => {
 window.refreshCalendar = refreshCalendar;
 window.refreshReminders = refreshReminders;
 window.refreshDrive = refreshDrive;
+window.refreshComms = refreshComms;
 window.preview = {
   renderTabs,
   switchTab,
   renderView,
   setTabData,
+  setUserInfo: (u) => {
+    previewState.userInfo = u;
+    if (previewState.activeTab === 'comms') {
+      renderView();
+    }
+  },
   refreshCalendar,
   refreshReminders,
   refreshDrive,
+  refreshComms,
   getActiveTab: () => previewState.activeTab
 };
