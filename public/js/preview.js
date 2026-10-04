@@ -185,6 +185,39 @@ async function refreshDrive(folderId = null) {
 }
 
 /**
+ * Display Drive search results directly or perform a Drive search query.
+ * @param {string} query
+ * @param {Array} [files]
+ */
+async function showDriveSearchResults(query, files = null) {
+  driveState.searchQuery = query || '';
+  driveState.isSearching = Boolean(query);
+
+  if (Array.isArray(files) && files.length > 0 && (files[0].webViewLink || files[0].link)) {
+    previewState.data.drive = files.map(f => ({
+      id: f.id,
+      name: f.name,
+      isFolder: Boolean(f.isFolder),
+      webViewLink: f.webViewLink || f.link,
+      modifiedTime: f.modifiedTime || f.modified,
+      folderName: f.folderName || f.folder,
+      size: f.size
+    }));
+    if (previewState.activeTab === 'drive') {
+      renderView();
+    }
+  } else {
+    await refreshDrive();
+  }
+
+  switchTab('drive');
+}
+
+async function searchDrive(query) {
+  return showDriveSearchResults(query);
+}
+
+/**
  * Fetch and refresh Telegram contacts and comms history from the server.
  * @param {string|number} [newId] - Optional ID of newly added comms message to flash in UI
  */
@@ -757,6 +790,8 @@ window.refreshCalendar = refreshCalendar;
 window.refreshReminders = refreshReminders;
 window.refreshDrive = refreshDrive;
 window.refreshComms = refreshComms;
+window.showDriveSearchResults = showDriveSearchResults;
+window.searchDrive = searchDrive;
 window.preview = {
   renderTabs,
   switchTab,
@@ -772,5 +807,8 @@ window.preview = {
   refreshReminders,
   refreshDrive,
   refreshComms,
+  showDriveSearchResults,
+  searchDrive,
   getActiveTab: () => previewState.activeTab
 };
+
