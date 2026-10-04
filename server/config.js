@@ -41,5 +41,6 @@ module.exports = {
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
   TELEGRAM_BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME,
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-  GEMINI_MODEL: process.env.GEMINI_MODEL
+  GEMINI_MODEL: (process.env.GEMINI_MODEL && !process.env.GEMINI_MODEL.includes('2.5') && !process.env.GEMINI_MODEL.includes('1.5') && !process.env.GEMINI_MODEL.includes('2.0')) ? process.env.GEMINI_MODEL : 'gemini-3.8-flash',
+  GEMINI_FALLBACK_MODEL: 'gemini-3.5-flash-lite'
 };

@@ -185,8 +185,71 @@ function renderQuickChips() {
   });
 }
 
+let totalActions = 0;
+let commandHistory = [];
+
 /**
- * Submit command to server without frontend keyword parsing.
+ * Handle individual agent event streamed from POST /api/command.
+ * @param {object} event
+ * @param {string} userCommandText
+ */
+function handleAgentEvent(event, userCommandText) {
+  if (event.type === 'step') {
+    if (event.status === 'running') {
+      window.chat.addMessage('j', `<span style="color: var(--dim); font-size: 11px;">⚡ [AGENT] ${window.esc(event.summary)}…</span>`);
+    } else if (event.status === 'done') {
+      totalActions++;
+      window.chat.updateActionCount(totalActions);
+
+      if (event.result && event.result.ui_action === 'open_upload') {
+        if (window.preview) window.preview.switchTab('drive');
+        if (window.openUploadDialog) window.openUploadDialog(event.result.folderName);
+      }
+
+      if (event.result && event.result.status === 'awaiting_user_confirmation') {
+        const actionCard = `
+          <div class="pending-action-card" id="action-card-${event.result.actionId}" style="border: 1px solid var(--gold); background: rgba(245, 197, 66, 0.08); padding: 10px 12px; margin: 8px 0;">
+            <div style="color: var(--gold); font-weight: 700; font-size: 11px; letter-spacing: 0.1em; margin-bottom: 4px;">// ACTION CONFIRMATION REQUIRED</div>
+            <div style="font-size: 12px; margin-bottom: 4px;">Telegram message to <b>${window.esc(event.result.recipient)}</b>:</div>
+            <blockquote style="margin: 4px 0 8px; border-left: 2px solid var(--gold); padding-left: 8px; color: var(--bone);">“${window.esc(event.result.message)}”</blockquote>
+            <div style="display: flex; gap: 8px;" id="action-btns-${event.result.actionId}">
+              <button class="b" data-confirm-action="${event.result.actionId}" style="margin: 0; padding: 4px 12px; font-size: 11px;">Confirm &amp; Send</button>
+              <button class="b alt" data-cancel-action="${event.result.actionId}" style="margin: 0; padding: 4px 12px; font-size: 11px;">Cancel</button>
+            </div>
+          </div>
+        `;
+        window.chat.addMessage('j', actionCard);
+      }
+
+      // Automatically sync and switch preview panes
+      if (event.tool === 'create_calendar_event' && window.refreshCalendar) {
+        window.refreshCalendar(event.result && event.result.id);
+        if (window.preview) window.preview.switchTab('cal');
+      } else if (event.tool === 'create_reminder' && window.refreshReminders) {
+        window.refreshReminders(event.result && event.result.id);
+        if (window.preview) window.preview.switchTab('rem');
+      } else if (event.tool === 'search_drive' && window.refreshDrive) {
+        if (window.preview) window.preview.switchTab('drive');
+      } else if (event.tool === 'send_telegram_message' && window.refreshComms) {
+        window.refreshComms();
+      }
+    } else if (event.status === 'error') {
+      if (event.code === 'auth_expired') {
+        window.dispatchEvent(new CustomEvent('auth-expired', { detail: { code: 'auth_expired' } }));
+      }
+    }
+  } else if (event.type === 'message') {
+    commandHistory.push({ role: 'user', text: userCommandText });
+    commandHistory.push({ role: 'model', text: event.text });
+    const formatted = window.esc(event.text).replace(/\n/g, '<br>');
+    window.chat.addMessage('j', formatted);
+  } else if (event.type === 'error') {
+    window.chat.addMessage('e', `⚠ ${window.esc(event.message)}`);
+  }
+}
+
+/**
+ * Submit command to server via SSE stream.
  * @param {string} raw
  */
 async function submitCommand(raw) {
@@ -200,17 +263,68 @@ async function submitCommand(raw) {
   window.chat.setStatus('processing');
   window.queue.enqueue(text);
 
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const nowISO = new Date().toISOString();
+
   try {
-    const res = await window.api.post('/api/command', { command: text });
-    if (res && res.message) {
-      window.chat.addMessage('j', res.message);
+    const response = await fetch('/api/command', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify({
+        text,
+        history: commandHistory.slice(-10),
+        timezone: browserTimezone,
+        nowISO
+      })
+    });
+
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth-expired', { detail: { url: '/api/command', status: 401 } }));
+      window.chat.setStatus('offline');
+      return;
     }
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop(); // Keep partial chunk in buffer
+
+      for (const block of blocks) {
+        const trimmed = block.trim();
+        if (!trimmed || !trimmed.startsWith('data:')) continue;
+        const jsonStr = trimmed.slice(5).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+          handleAgentEvent(event, text);
+        } catch (e) {
+          console.warn('[SSE] Could not parse event chunk:', jsonStr);
+        }
+      }
+    }
+
     window.chat.setStatus('online');
+    window.queue.dequeue();
   } catch (err) {
-    if (err.status !== 401) {
-      window.chat.addMessage('e', `⚠ Command processing failed: ${window.esc(err.message)}`);
-    }
+    window.chat.addMessage('e', `⚠ Command processing failed: ${window.esc(err.message)}`);
     window.chat.setStatus('online');
+    window.queue.dequeue();
   }
 }
 
@@ -305,6 +419,63 @@ document.addEventListener('DOMContentLoaded', () => {
     window.chat.addMessage('e', '⚠ Google authorization expired. Please click "Reconnect Google" above.');
     if (window.chat && window.chat.showToast) {
       window.chat.showToast('Google authorization expired. Reconnect required.');
+    }
+  });
+
+  // Handle Pending Actions Confirmation & Cancellation
+  document.addEventListener('click', async (e) => {
+    const confirmBtn = e.target.closest('button[data-confirm-action]');
+    if (confirmBtn) {
+      const actionId = confirmBtn.dataset.confirmAction;
+      const btnsContainer = document.querySelector(`#action-btns-${actionId}`);
+      if (btnsContainer) {
+        btnsContainer.innerHTML = '<span style="color: var(--dim); font-size: 11px;">Transmitting via Telegram…</span>';
+      }
+
+      try {
+        await window.api.post(`/api/actions/${actionId}/confirm`);
+        if (btnsContainer) {
+          btnsContainer.innerHTML = '<span style="color: var(--ok); font-size: 11px; font-weight: 700;">✓ TRANSMISSION CONFIRMED &amp; SENT</span>';
+        }
+        if (window.chat && window.chat.showToast) {
+          window.chat.showToast('Telegram message sent');
+        }
+        if (window.refreshComms) {
+          window.refreshComms();
+        }
+      } catch (err) {
+        if (btnsContainer) {
+          btnsContainer.innerHTML = `<span style="color: var(--err); font-size: 11px;">Error: ${window.esc(err.message)}</span>`;
+        }
+      }
+      return;
+    }
+
+    const cancelBtn = e.target.closest('button[data-cancel-action]');
+    if (cancelBtn) {
+      const actionId = cancelBtn.dataset.cancelAction;
+      const btnsContainer = document.querySelector(`#action-btns-${actionId}`);
+      if (btnsContainer) {
+        btnsContainer.innerHTML = '<span style="color: var(--dim); font-size: 11px;">Cancelling…</span>';
+      }
+
+      try {
+        await window.api.post(`/api/actions/${actionId}/cancel`);
+        if (btnsContainer) {
+          btnsContainer.innerHTML = '<span style="color: var(--dim); font-size: 11px;">✕ TRANSMISSION CANCELLED</span>';
+        }
+        if (window.chat && window.chat.showToast) {
+          window.chat.showToast('Action cancelled');
+        }
+        if (window.refreshComms) {
+          window.refreshComms();
+        }
+      } catch (err) {
+        if (btnsContainer) {
+          btnsContainer.innerHTML = `<span style="color: var(--err); font-size: 11px;">Error: ${window.esc(err.message)}</span>`;
+        }
+      }
+      return;
     }
   });
 

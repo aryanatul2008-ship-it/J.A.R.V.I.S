@@ -98,6 +98,14 @@ app.use(driveRoutes);
 const telegramRoutes = require('./routes/telegram');
 app.use(telegramRoutes);
 
+// Command agent reasoning route
+const commandRoutes = require('./routes/command');
+app.use(commandRoutes);
+
+// Pending actions confirmation and cancellation routes
+const actionsRoutes = require('./routes/actions');
+app.use(actionsRoutes);
+
 // Live Server-Sent Events stream
 const { router: eventsRouter } = require('./routes/events');
 app.use(eventsRouter);
