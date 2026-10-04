@@ -13,6 +13,20 @@ const PREVIEW_TABS = [
 const previewState = {
   activeTab: 'cal',
   loading: false,
+  tabLoading: {
+    cal: false,
+    rem: false,
+    drive: false,
+    comms: false,
+    hist: false
+  },
+  tabError: {
+    cal: null,
+    rem: null,
+    drive: null,
+    comms: null,
+    hist: null
+  },
   historyFilter: 'all', // 'all' | 'failed'
   lastNewEventId: null,
   lastNewReminderId: null,
@@ -61,6 +75,48 @@ function fmtDay(d) {
 }
 
 /**
+ * Render skeleton loading rows for tabs.
+ * @param {string} [tab]
+ * @returns {string}
+ */
+function renderSkeleton(tab) {
+  return `
+    <div class="skeleton-list" aria-busy="true" aria-label="Loading content">
+      <div class="skeleton-row">
+        <div class="sk-tag"></div>
+        <div class="sk-title"></div>
+        <div class="sk-sub"></div>
+      </div>
+      <div class="skeleton-row">
+        <div class="sk-tag"></div>
+        <div class="sk-title" style="width: 55%;"></div>
+        <div class="sk-sub" style="width: 35%;"></div>
+      </div>
+      <div class="skeleton-row">
+        <div class="sk-tag"></div>
+        <div class="sk-title" style="width: 70%;"></div>
+        <div class="sk-sub" style="width: 45%;"></div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render error container with retry button.
+ * @param {string} tabKey
+ * @param {string} errorMessage
+ * @returns {string}
+ */
+function renderTabError(tabKey, errorMessage) {
+  return `
+    <div class="tab-error-box" role="alert">
+      <div class="tab-error-msg">⚠ ${esc(errorMessage || 'Failed to load data')}</div>
+      <button class="b alt retry-btn" data-retry-tab="${esc(tabKey)}" aria-label="Retry loading ${esc(tabKey)}">RETRY</button>
+    </div>
+  `;
+}
+
+/**
  * Render the tab list header in the Live Preview panel.
  */
 function renderTabs() {
@@ -69,7 +125,7 @@ function renderTabs() {
 
   container.innerHTML = PREVIEW_TABS.map(([key, label]) => {
     const isSelected = previewState.activeTab === key;
-    return `<button class="tab" role="tab" data-t="${key}" aria-selected="${isSelected}">${label.toUpperCase()}</button>`;
+    return `<button class="tab" role="tab" data-t="${key}" aria-selected="${isSelected}" aria-label="${label} tab">${label.toUpperCase()}</button>`;
   }).join('');
 }
 
@@ -104,15 +160,22 @@ async function refreshCalendar(newId = null) {
     previewState.lastNewEventId = newId;
   }
 
+  previewState.tabLoading.cal = true;
+  previewState.tabError.cal = null;
+  if (previewState.activeTab === 'cal') {
+    renderView();
+  }
+
   try {
-    previewState.loading = true;
     const res = await window.api.get('/api/calendar/events');
     const events = Array.isArray(res) ? res : (res && res.events) || [];
     previewState.data.cal = events;
+    previewState.tabError.cal = null;
   } catch (err) {
     console.warn('[CALENDAR] Unable to fetch calendar events:', err.message);
+    previewState.tabError.cal = err.message || 'Unable to fetch calendar events';
   } finally {
-    previewState.loading = false;
+    previewState.tabLoading.cal = false;
     if (previewState.activeTab === 'cal') {
       renderView();
     }
@@ -135,13 +198,22 @@ async function refreshReminders(newId = null) {
     previewState.lastNewReminderId = newId;
   }
 
+  previewState.tabLoading.rem = true;
+  previewState.tabError.rem = null;
+  if (previewState.activeTab === 'rem') {
+    renderView();
+  }
+
   try {
     const res = await window.api.get('/api/reminders?scope=upcoming');
     const reminders = Array.isArray(res) ? res : (res && res.reminders) || [];
     previewState.data.rem = reminders;
+    previewState.tabError.rem = null;
   } catch (err) {
     console.warn('[REMINDERS] Unable to fetch reminders:', err.message);
+    previewState.tabError.rem = err.message || 'Unable to fetch reminders';
   } finally {
+    previewState.tabLoading.rem = false;
     if (previewState.activeTab === 'rem') {
       renderView();
     }
@@ -166,6 +238,12 @@ async function refreshDrive(folderId = null) {
     driveState.isSearching = false;
   }
 
+  previewState.tabLoading.drive = true;
+  previewState.tabError.drive = null;
+  if (previewState.activeTab === 'drive') {
+    renderView();
+  }
+
   try {
     if (driveState.isSearching && driveState.searchQuery) {
       const res = await window.api.get(`/api/drive/search?q=${encodeURIComponent(driveState.searchQuery)}`);
@@ -175,9 +253,12 @@ async function refreshDrive(folderId = null) {
       previewState.data.drive = (res && res.files) || [];
       driveState.currentFolder = (res && res.folder) || { id: 'root', name: 'My Drive', parentId: null };
     }
+    previewState.tabError.drive = null;
   } catch (err) {
     console.warn('[DRIVE] Unable to load Drive explorer:', err.message);
+    previewState.tabError.drive = err.message || 'Unable to load Drive files';
   } finally {
+    previewState.tabLoading.drive = false;
     if (previewState.activeTab === 'drive') {
       renderView();
     }
@@ -206,6 +287,8 @@ async function showDriveSearchResults(query, files = null) {
       folderName: f.folderName || f.folder,
       size: f.size
     }));
+    previewState.tabLoading.drive = false;
+    previewState.tabError.drive = null;
     if (previewState.activeTab === 'drive') {
       renderView();
     }
@@ -229,19 +312,26 @@ async function refreshComms(newId = null) {
     previewState.lastNewCommsId = newId;
   }
 
+  previewState.tabLoading.comms = true;
+  previewState.tabError.comms = null;
+  if (previewState.activeTab === 'comms') {
+    renderView();
+  }
+
   try {
-    previewState.loading = true;
     const [contactsRes, commsRes] = await Promise.all([
-      window.api.get('/api/contacts').catch(() => []),
-      window.api.get('/api/comms').catch(() => [])
+      window.api.get('/api/contacts').catch((e) => { throw e; }),
+      window.api.get('/api/comms').catch((e) => { throw e; })
     ]);
 
     previewState.data.contacts = Array.isArray(contactsRes) ? contactsRes : [];
     previewState.data.comms = Array.isArray(commsRes) ? commsRes : [];
+    previewState.tabError.comms = null;
   } catch (err) {
     console.warn('[COMMS] Unable to refresh comms:', err.message);
+    previewState.tabError.comms = err.message || 'Unable to refresh contacts and communications';
   } finally {
-    previewState.loading = false;
+    previewState.tabLoading.comms = false;
     if (previewState.activeTab === 'comms') {
       renderView();
     }
@@ -252,14 +342,21 @@ async function refreshComms(newId = null) {
  * Fetch and refresh action execution history from the server.
  */
 async function refreshHistory() {
+  previewState.tabLoading.hist = true;
+  previewState.tabError.hist = null;
+  if (previewState.activeTab === 'hist') {
+    renderView();
+  }
+
   try {
-    previewState.loading = true;
     const res = await window.api.get('/api/history?limit=50');
     previewState.data.hist = (res && res.history) || [];
+    previewState.tabError.hist = null;
   } catch (err) {
     console.warn('[HISTORY] Unable to refresh history:', err.message);
+    previewState.tabError.hist = err.message || 'Unable to refresh action history';
   } finally {
-    previewState.loading = false;
+    previewState.tabLoading.hist = false;
     if (previewState.activeTab === 'hist') {
       renderView();
     }
@@ -348,9 +445,9 @@ function renderDriveView(files) {
   // 1. Search Bar
   html += `
     <div class="drive-search-bar">
-      <input id="drive-search-input" value="${esc(driveState.searchQuery)}" placeholder="Search files and content in Drive…">
-      <button class="b" id="drive-search-btn">Search</button>
-      ${driveState.isSearching ? '<button class="b alt" id="drive-clear-search-btn">Show all files</button>' : ''}
+      <input id="drive-search-input" aria-label="Search Drive files" value="${esc(driveState.searchQuery)}" placeholder="Search files and content in Drive…">
+      <button class="b" id="drive-search-btn" aria-label="Search Drive files">Search</button>
+      ${driveState.isSearching ? '<button class="b alt" id="drive-clear-search-btn" aria-label="Show all files">Show all files</button>' : ''}
     </div>
   `;
 
@@ -363,7 +460,7 @@ function renderDriveView(files) {
       html += '<p class="path">Drive / My Drive</p>';
     } else {
       const parentId = driveState.currentFolder.parentId || 'root';
-      html += `<p class="path"><button class="lnk" data-nav-folder="${esc(parentId)}" style="margin-right: 6px;">‹ Back</button> Drive / <b>${esc(driveState.currentFolder.name)}</b></p>`;
+      html += `<p class="path"><button class="lnk" data-nav-folder="${esc(parentId)}" style="margin-right: 6px;" aria-label="Go back to parent folder">‹ Back</button> Drive / <b>${esc(driveState.currentFolder.name)}</b></p>`;
     }
   }
 
@@ -374,17 +471,17 @@ function renderDriveView(files) {
       <div class="drive-upload-row">
         <label class="b alt" style="cursor: pointer; margin: 0;">
           Choose file
-          <input type="file" id="drive-file-input" style="display: none;">
+          <input type="file" id="drive-file-input" aria-label="Choose file to upload" style="display: none;">
         </label>
         <span id="drive-selected-file-label" style="color: var(--dim); font-size: 12px;">No file chosen</span>
       </div>
       <div class="drive-upload-row">
         <span style="color: var(--dim); font-size: 12px;">Destination:</span>
-        <select id="drive-folder-select" class="drive-select"></select>
+        <select id="drive-folder-select" class="drive-select" aria-label="Destination folder"></select>
         <div id="drive-new-folder-wrap" style="display: none;">
-          <input id="drive-new-folder-input" class="drive-input" placeholder="New folder name…">
+          <input id="drive-new-folder-input" class="drive-input" aria-label="New folder name" placeholder="New folder name…">
         </div>
-        <button class="b" id="drive-upload-btn" style="margin-left: auto;">Upload to Drive</button>
+        <button class="b" id="drive-upload-btn" style="margin-left: auto;" aria-label="Upload selected file to Drive">Upload to Drive</button>
       </div>
       <div class="bar" id="drive-upload-progress" style="display: none;"><i></i></div>
       <div id="drive-upload-status" class="upload-status" style="display: none;"></div>
@@ -403,7 +500,7 @@ function renderDriveView(files) {
       html += `
         <div class="row">
           <span class="tag">FOLDER</span>
-          <b><button class="lnk" data-folder-id="${esc(f.id)}" style="font-weight: 700; font-size: 13px; border: none; padding: 0; background: none; color: var(--g);">📁 ${esc(f.name)}</button></b>
+          <b><button class="lnk" data-folder-id="${esc(f.id)}" aria-label="Open folder ${esc(f.name)}" style="font-weight: 700; font-size: 13px; border: none; padding: 0; background: none; color: var(--g); text-align: left;">📁 ${esc(f.name)}</button></b>
           <span></span>
           <small>${f.modifiedTime ? 'modified ' + fmtDay(new Date(f.modifiedTime)) : ''}</small>
         </div>
@@ -414,7 +511,7 @@ function renderDriveView(files) {
         <div class="row">
           <span class="tag">${esc(ext)}</span>
           <b>${esc(f.name)}</b>
-          ${f.webViewLink ? `<a href="${esc(f.webViewLink)}" target="_blank" rel="noopener noreferrer" class="lnk">Open</a>` : '<span></span>'}
+          ${f.webViewLink ? `<a href="${esc(f.webViewLink)}" target="_blank" rel="noopener noreferrer" class="lnk" aria-label="Open file ${esc(f.name)} in Google Drive">Open</a>` : '<span></span>'}
           <small>${f.folderName ? esc(f.folderName) + ' · ' : ''}${f.modifiedTime ? 'modified ' + fmtDay(new Date(f.modifiedTime)) : ''}${f.size ? ' · ' + Math.round(f.size / 1024) + ' KB' : ''}</small>
         </div>
       `;
@@ -446,11 +543,11 @@ function renderCommsView(contacts, comms) {
         <span class="tag ${user.telegramLinked ? '' : 'r'}">${user.telegramLinked ? 'REMINDERS LINKED' : 'REMINDERS UNLINKED'}</span>
       </div>
       <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
-        <input type="text" readonly value="${esc(inviteLink)}" id="comms-invite-input" class="drive-input" style="flex: 1; font-size: 11px;" placeholder="Invite link available after sign-in">
-        <button class="b" id="comms-copy-btn" style="margin: 0; padding: 5px 12px; font-size: 11px;">Copy Link</button>
+        <input type="text" readonly value="${esc(inviteLink)}" id="comms-invite-input" aria-label="Telegram invite link" class="drive-input" style="flex: 1; font-size: 11px;" placeholder="Invite link available after sign-in">
+        <button class="b" id="comms-copy-btn" aria-label="Copy Telegram invite link" style="margin: 0; padding: 5px 14px; font-size: 11px; min-height: 40px;">Copy Link</button>
       </div>
       <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-        ${selfInviteLink ? `<a href="${esc(selfInviteLink)}" target="_blank" rel="noopener noreferrer" class="b alt" style="margin: 0; padding: 4px 12px; font-size: 11px; text-decoration: none;">Link my Telegram for reminders</a>` : ''}
+        ${selfInviteLink ? `<a href="${esc(selfInviteLink)}" target="_blank" rel="noopener noreferrer" class="b alt" aria-label="Link your Telegram for reminders" style="margin: 0; padding: 4px 14px; font-size: 11px; text-decoration: none; min-height: 40px;">Link my Telegram for reminders</a>` : ''}
         <span style="color: var(--dim); font-size: 11px;">Recipients must open your invite link once to start chat.</span>
       </div>
     </div>
@@ -471,12 +568,12 @@ function renderCommsView(contacts, comms) {
             <div class="contact-edit-form">
               <span style="font-size: 11px; color: var(--gold); font-weight: 700;">EDIT CONTACT</span>
               <div class="contact-edit-inputs">
-                <input id="contact-edit-name-${c.id}" value="${esc(c.name)}" placeholder="Contact name…">
-                <input id="contact-edit-aliases-${c.id}" value="${esc(aliasesStr)}" placeholder="Aliases (comma-separated, e.g. Bruce, Hulk)…">
+                <input id="contact-edit-name-${c.id}" aria-label="Contact name" value="${esc(c.name)}" placeholder="Contact name…">
+                <input id="contact-edit-aliases-${c.id}" aria-label="Contact aliases" value="${esc(aliasesStr)}" placeholder="Aliases (comma-separated, e.g. Bruce, Hulk)…">
               </div>
               <div style="display: flex; gap: 6px; margin-top: 4px;">
-                <button class="b" data-save-contact="${c.id}" style="margin: 0; padding: 3px 10px; font-size: 11px;">Save</button>
-                <button class="b alt" data-cancel-contact="${c.id}" style="margin: 0; padding: 3px 10px; font-size: 11px;">Cancel</button>
+                <button class="b" data-save-contact="${c.id}" aria-label="Save contact" style="margin: 0; padding: 3px 12px; font-size: 11px; min-height: 40px;">Save</button>
+                <button class="b alt" data-cancel-contact="${c.id}" aria-label="Cancel editing contact" style="margin: 0; padding: 3px 12px; font-size: 11px; min-height: 40px;">Cancel</button>
               </div>
             </div>
           </div>
@@ -492,8 +589,8 @@ function renderCommsView(contacts, comms) {
               </div>
             </div>
             <div class="contact-actions">
-              <button class="contact-btn" data-edit-contact="${c.id}">Edit</button>
-              <button class="contact-btn del" data-delete-contact="${c.id}">Delete</button>
+              <button class="contact-btn" data-edit-contact="${c.id}" aria-label="Edit contact ${esc(c.name)}">Edit</button>
+              <button class="contact-btn del" data-delete-contact="${c.id}" aria-label="Delete contact ${esc(c.name)}">Delete</button>
             </div>
           </div>
         `;
@@ -561,8 +658,8 @@ function renderHistoryView(history = []) {
 
   let html = `
     <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
-      <button class="b ${filter === 'all' ? '' : 'alt'}" data-history-filter="all" style="margin: 0; padding: 4px 12px; font-size: 11px;">ALL (${allItems.length})</button>
-      <button class="b ${filter === 'failed' ? '' : 'alt'}" data-history-filter="failed" style="margin: 0; padding: 4px 12px; font-size: 11px;">FAILED (${failedItems.length})</button>
+      <button class="b ${filter === 'all' ? '' : 'alt'}" data-history-filter="all" aria-label="Show all history actions" style="margin: 0; padding: 4px 14px; font-size: 11px; min-height: 40px;">ALL (${allItems.length})</button>
+      <button class="b ${filter === 'failed' ? '' : 'alt'}" data-history-filter="failed" aria-label="Show failed history actions only" style="margin: 0; padding: 4px 14px; font-size: 11px; min-height: 40px;">FAILED (${failedItems.length})</button>
     </div>
   `;
 
@@ -611,6 +708,19 @@ function renderView() {
 
   const currentTab = previewState.activeTab;
 
+  // 1. Loading state: skeleton loading text
+  if (previewState.tabLoading && previewState.tabLoading[currentTab]) {
+    viewEl.innerHTML = renderSkeleton(currentTab);
+    return;
+  }
+
+  // 2. Error state: error container with retry button
+  if (previewState.tabError && previewState.tabError[currentTab]) {
+    viewEl.innerHTML = renderTabError(currentTab, previewState.tabError[currentTab]);
+    return;
+  }
+
+  // 3. Tab views
   if (currentTab === 'cal') {
     viewEl.innerHTML = renderCalendarView(previewState.data.cal);
     return;
@@ -672,9 +782,25 @@ function setTabData(tabKey, items) {
   }
 }
 
-// Global click delegation for reminders and drive browsing
+// Global click delegation for reminders, drive browsing, and retries
 document.addEventListener('click', async (e) => {
-  // Reminder dismissal
+  // Retry tab fetch button
+  const retryBtn = e.target.closest('button[data-retry-tab]');
+  if (retryBtn) {
+    const tab = retryBtn.dataset.retryTab;
+    if (tab === 'cal') {
+      refreshCalendar();
+    } else if (tab === 'rem') {
+      refreshReminders();
+    } else if (tab === 'drive') {
+      refreshDrive();
+    } else if (tab === 'comms') {
+      refreshComms();
+    } else if (tab === 'hist') {
+      refreshHistory();
+    }
+    return;
+  }
   const dismissBtn = e.target.closest('button[data-dismiss]');
   if (dismissBtn) {
     const reminderId = dismissBtn.dataset.dismiss;

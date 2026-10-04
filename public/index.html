@@ -91,7 +91,7 @@
       <span id="clock"></span>
       <div id="user-profile" style="display: none; align-items: center; gap: 8px;">
         <span id="user-name" style="color: var(--ok); font-size: 12px; font-weight: 500;"></span>
-        <button id="logout-btn" class="b alt" style="min-height: 36px; padding: 2px 10px; font-size: 11px;">LOG OUT</button>
+        <button id="logout-btn" class="b alt" aria-label="Log out" style="min-height: 40px; padding: 4px 12px; font-size: 11px;">LOG OUT</button>
       </div>
       <div class="st" id="st">
         <span class="dot"></span>
@@ -102,7 +102,7 @@
     <!-- Reconnect Google Banner when token expires -->
     <div id="auth-expired-banner" class="banner" style="display: none;">
       <span>⚠ Google authorization expired. Calendar & Drive access paused.</span>
-      <a href="/auth/google" class="b auth-btn" style="min-height: 34px; padding: 4px 12px; font-size: 11px; width: auto;">RECONNECT GOOGLE</a>
+      <a href="/auth/google" class="b auth-btn" aria-label="Reconnect Google" style="min-height: 40px; padding: 4px 14px; font-size: 11px; width: auto;">RECONNECT GOOGLE</a>
     </div>
 
     <!-- Integrations Bar -->
@@ -138,12 +138,12 @@
         <div id="qbar">
           <span style="color:var(--dim)">QUEUE:</span>
           <span id="qs"></span>
-          <button id="mode" title="Choose what a new command does while JARVIS is busy"></button>
+          <button id="mode" aria-label="Toggle command queue mode" title="Choose what a new command does while JARVIS is busy"></button>
         </div>
         <div id="chips"></div>
         <div class="inp">
           <input id="in" placeholder="Give JARVIS a command…" autocomplete="off" aria-label="Command">
-          <button class="b" id="go">Send</button>
+          <button class="b" id="go" aria-label="Send command">Send</button>
         </div>
       </section>
 
@@ -159,7 +159,7 @@
     </main>
   </div>
 
-  <input type="file" id="file" hidden>
+  <input type="file" id="file" hidden aria-label="Upload document">
   <div id="toast"></div>
 
   <!-- Frontend Modules -->

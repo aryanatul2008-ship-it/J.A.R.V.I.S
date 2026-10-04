@@ -33,23 +33,29 @@ body {
   overflow-x: hidden;
 }
 
-button, input, a.b {
+button, input, select, textarea, a.b {
   font: inherit;
   color: inherit;
+  box-sizing: border-box;
 }
 
-/* Ensure buttons are at least 40px tall for accessibility */
-button, a.b {
+/* Ensure all buttons, links and form inputs are at least 40px tall for accessibility */
+button, a.b, .tab, .chip, #mode, #chips button, .contact-btn, .lnk, .retry-btn {
   min-height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   text-decoration: none;
+  box-sizing: border-box;
+}
+
+input, select, textarea {
+  min-height: 40px;
 }
 
 :focus-visible {
-  outline: 2px solid var(--ok);
-  outline-offset: 2px;
+  outline: 2px solid var(--ok) !important;
+  outline-offset: 2px !important;
 }
 
 .brand {
@@ -487,10 +493,12 @@ button, a.b {
   background: transparent;
   border: 1px solid var(--line);
   color: var(--g);
-  padding: 2px 10px;
+  padding: 4px 10px;
   cursor: pointer;
   font-size: 12px;
-  min-height: 32px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Toast */
@@ -801,6 +809,147 @@ button, a.b {
     animation: none !important;
     transition: none !important;
   }
+  .hud svg circle animateTransform,
+  .hud svg g animateTransform,
+  .holo animateTransform,
+  .holo animate {
+    display: none !important;
+  }
+}
+
+/* Mobile Responsive rules for 480px / 360px */
+@media (max-width: 480px) {
+  .wrap {
+    padding: 8px 10px 16px;
+  }
+  .top {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .row {
+    grid-template-columns: auto 1fr;
+    gap: 6px;
+  }
+  .row small {
+    grid-column: 1 / -1;
+  }
+  .contact-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .contact-actions {
+    justify-content: flex-start;
+  }
+  .drive-search-bar {
+    flex-wrap: wrap;
+  }
+  .drive-search-bar input {
+    width: 100%;
+  }
+  .drive-upload-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .drive-upload-row select,
+  .drive-upload-row button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+}
+
+/* Tab Loading Skeletons */
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.skeleton-row {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 10px;
+  padding: 14px 12px;
+  border: 1px solid var(--line);
+  background: rgba(1, 14, 20, 0.4);
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.sk-tag {
+  height: 18px;
+  width: 60px;
+  background: rgba(31, 214, 240, 0.15);
+  border: 1px solid rgba(31, 214, 240, 0.3);
+}
+
+.sk-title {
+  height: 14px;
+  width: 75%;
+  background: rgba(184, 251, 255, 0.12);
+  border-radius: 2px;
+}
+
+.sk-sub {
+  height: 12px;
+  width: 50px;
+  background: rgba(106, 166, 181, 0.15);
+  border-radius: 2px;
+}
+
+.skeleton-row::after {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(31, 214, 240, 0.08) 20%,
+    rgba(184, 251, 255, 0.18) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 1.8s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Tab Error State */
+.tab-error-box {
+  border: 1px solid var(--err);
+  background: rgba(255, 107, 107, 0.1);
+  padding: 24px 16px;
+  text-align: center;
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.tab-error-msg {
+  color: #ffc9c9;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+
+.retry-btn {
+  min-height: 40px;
+  padding: 6px 20px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border-color: var(--err);
+  color: #ffc9c9;
+}
+
+.retry-btn:hover {
+  background: rgba(255, 107, 107, 0.2);
+  border-color: var(--err);
 }
 
 /* Step Lines & Tool Execution Indicators */
