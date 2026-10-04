@@ -12,6 +12,73 @@ const QUICK_CHIPS = [
 ];
 
 let currentUser = null;
+let eventSource = null;
+
+/**
+ * Handle incoming real-time reminder alerts from Server-Sent Events.
+ * @param {object} reminder
+ */
+function handleReminderAlert(reminder) {
+  // Prominent in-app alert in JARVIS console style
+  const alertHtml = `
+    <div style="border: 1px solid var(--warn); background: rgba(242, 193, 78, 0.15); padding: 10px 14px; margin: 4px 0;">
+      <span style="color: var(--warn); font-weight: 700; letter-spacing: 0.12em;">⚡ REMINDER ALERT:</span>
+      <span style="color: var(--bone); margin-left: 8px;">${window.esc(reminder.text)}</span>
+    </div>
+  `;
+  window.chat.addMessage('j', alertHtml);
+  window.chat.showToast(`Reminder: ${reminder.text}`);
+
+  // Browser system notification if permission was granted
+  if (typeof Notification !== 'undefined') {
+    if (Notification.permission === 'granted') {
+      try {
+        new Notification('J.A.R.V.I.S Reminder', {
+          body: reminder.text
+        });
+      } catch (_) {}
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }
+
+  // Refresh active reminders view
+  if (window.refreshReminders) {
+    window.refreshReminders();
+  }
+}
+
+/**
+ * Connect to persistent Server-Sent Events stream.
+ */
+function initEventSource() {
+  if (eventSource) return;
+
+  eventSource = new EventSource('/api/events');
+
+  eventSource.addEventListener('reminder', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      handleReminderAlert(data);
+    } catch (err) {
+      console.warn('[SSE] Failed to parse reminder event:', err.message);
+    }
+  });
+
+  eventSource.onerror = (err) => {
+    console.warn('[SSE] EventSource stream interrupted, will retry:', err);
+  };
+}
+
+/**
+ * Disconnect active Server-Sent Events stream.
+ */
+function closeEventSource() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+}
 
 /**
  * Switch page visibility between Logged Out and Logged In views.
@@ -34,11 +101,13 @@ function setAuthState(isLoggedIn, user = null) {
     if (userNameEl && user) {
       userNameEl.textContent = user.name || user.email || 'Tony Stark';
     }
+    initEventSource();
   } else {
     if (authView) authView.style.display = 'flex';
     if (mainView) mainView.style.display = 'none';
     if (userProfile) userProfile.style.display = 'none';
     if (authBanner) authBanner.style.display = 'none';
+    closeEventSource();
   }
 }
 
@@ -50,6 +119,7 @@ async function checkAuth() {
   if (params.get('view') === 'app' || params.get('mock') === '1') {
     setAuthState(true, { name: 'Commander (Preview Mode)' });
     if (window.refreshCalendar) window.refreshCalendar();
+    if (window.refreshReminders) window.refreshReminders();
     return;
   }
 
@@ -59,6 +129,9 @@ async function checkAuth() {
 
     if (window.refreshCalendar) {
       window.refreshCalendar();
+    }
+    if (window.refreshReminders) {
+      window.refreshReminders();
     }
 
     // Sync browser timezone with user profile

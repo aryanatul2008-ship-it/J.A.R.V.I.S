@@ -86,6 +86,14 @@ app.use(authRoutes);
 const calendarRoutes = require('./routes/calendar');
 app.use(calendarRoutes);
 
+// Reminders routes
+const remindersRoutes = require('./routes/reminders');
+app.use(remindersRoutes);
+
+// Live Server-Sent Events stream
+const { router: eventsRouter } = require('./routes/events');
+app.use(eventsRouter);
+
 // Auth status endpoint for client bootstrapping
 app.get('/api/auth/status', (req, res) => {
   if (req.session && req.session.userId) {
@@ -100,10 +108,14 @@ app.use('/api', notFoundHandler);
 // Centralized error handling middleware
 app.use(errorHandler);
 
+// Initialize background scheduler
+const scheduler = require('./services/scheduler');
+
 // Initialize database schema and listen
 async function startServer() {
   try {
     await db.init();
+    scheduler.init();
     app.listen(config.PORT, () => {
       console.log(`[J.A.R.V.I.S] Stark Command Centre server online at http://localhost:${config.PORT}`);
     });

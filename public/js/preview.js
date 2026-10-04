@@ -14,6 +14,7 @@ const previewState = {
   activeTab: 'cal',
   loading: false,
   lastNewEventId: null,
+  lastNewReminderId: null,
   data: {
     cal: [],
     rem: [],
@@ -71,6 +72,8 @@ function switchTab(tabKey) {
 
   if (tabKey === 'cal') {
     refreshCalendar();
+  } else if (tabKey === 'rem') {
+    refreshReminders();
   }
 }
 
@@ -95,11 +98,39 @@ async function refreshCalendar(newId = null) {
     if (previewState.activeTab === 'cal') {
       renderView();
     }
-    // Clear flash status after animation completes
     if (newId) {
       setTimeout(() => {
         if (previewState.lastNewEventId === newId) {
           previewState.lastNewEventId = null;
+        }
+      }, 2500);
+    }
+  }
+}
+
+/**
+ * Fetch and refresh active reminders from the server.
+ * @param {number|string} [newId] - Optional ID of newly added reminder to flash in UI
+ */
+async function refreshReminders(newId = null) {
+  if (newId) {
+    previewState.lastNewReminderId = newId;
+  }
+
+  try {
+    const res = await window.api.get('/api/reminders?scope=upcoming');
+    const reminders = Array.isArray(res) ? res : (res && res.reminders) || [];
+    previewState.data.rem = reminders;
+  } catch (err) {
+    console.warn('[REMINDERS] Unable to fetch reminders:', err.message);
+  } finally {
+    if (previewState.activeTab === 'rem') {
+      renderView();
+    }
+    if (newId) {
+      setTimeout(() => {
+        if (previewState.lastNewReminderId === newId) {
+          previewState.lastNewReminderId = null;
         }
       }, 2500);
     }
@@ -114,11 +145,9 @@ function renderCalendarView(events) {
     return '<div class="empty">No events scheduled.</div>';
   }
 
-  // Sort events chronologically
   const sorted = events.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
-
-  // Group events by day string
   const grouped = {};
+
   sorted.forEach((event) => {
     const dateObj = new Date(event.start);
     const dayKey = isNaN(dateObj.getTime()) ? 'Unscheduled' : fmtDay(dateObj);
@@ -153,6 +182,35 @@ function renderCalendarView(events) {
 }
 
 /**
+ * Render active reminders with amber REMINDER tag and Dismiss button.
+ */
+function renderRemindersView(reminders) {
+  if (!reminders || reminders.length === 0) {
+    return '<div class="empty">No active reminders.</div>';
+  }
+
+  const sorted = reminders.slice().sort((a, b) => new Date(a.due_at) - new Date(b.due_at));
+
+  return sorted.map((r) => {
+    const dueDate = new Date(r.due_at);
+    const isNew = previewState.lastNewReminderId && String(previewState.lastNewReminderId) === String(r.id);
+    const timeStr = isNaN(dueDate.getTime()) ? '' : fmtTime(dueDate);
+    const dayStr = isNaN(dueDate.getTime()) ? '' : fmtDay(dueDate);
+
+    return `
+      <div class="row${isNew ? ' new' : ''}">
+        <span class="tag r">REMINDER</span>
+        <b>${esc(r.text)}</b>
+        <span>${esc(timeStr)}</span>
+        <small>
+          ${esc(dayStr)} · <button class="lnk" data-dismiss="${esc(r.id)}">Dismiss</button>
+        </small>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
  * Render the content for the currently active tab.
  */
 function renderView() {
@@ -166,14 +224,16 @@ function renderView() {
     return;
   }
 
+  if (currentTab === 'rem') {
+    viewEl.innerHTML = renderRemindersView(previewState.data.rem);
+    return;
+  }
+
   const items = previewState.data[currentTab] || [];
 
   if (items.length === 0) {
     let emptyMsg = 'No records found.';
     switch (currentTab) {
-      case 'rem':
-        emptyMsg = 'No active reminders.';
-        break;
       case 'drive':
         emptyMsg = 'No files in Drive.';
         break;
@@ -205,12 +265,37 @@ function setTabData(tabKey, items) {
   }
 }
 
+// Global click delegation for reminder dismissal
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-dismiss]');
+  if (!btn) return;
+
+  const reminderId = btn.dataset.dismiss;
+  btn.disabled = true;
+
+  try {
+    await window.api.post(`/api/reminders/${reminderId}/dismiss`);
+    if (window.chat && window.chat.showToast) {
+      window.chat.showToast('Reminder dismissed');
+    }
+    refreshReminders();
+  } catch (err) {
+    console.error('Failed to dismiss reminder:', err);
+    if (window.chat && window.chat.showToast) {
+      window.chat.showToast(`Error: ${err.message}`);
+    }
+    btn.disabled = false;
+  }
+});
+
 window.refreshCalendar = refreshCalendar;
+window.refreshReminders = refreshReminders;
 window.preview = {
   renderTabs,
   switchTab,
   renderView,
   setTabData,
   refreshCalendar,
+  refreshReminders,
   getActiveTab: () => previewState.activeTab
 };

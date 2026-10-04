@@ -31,17 +31,26 @@ async function query(text, params) {
 }
 
 /**
- * Run schema.sql migrations on server startup.
+ * Run schema.sql migrations on server startup with retries for serverless Postgres pools.
  */
 async function init() {
-  try {
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const sql = fs.readFileSync(schemaPath, 'utf8');
-    await pool.query(sql);
-    console.log('[DB] Database schema initialized successfully');
-  } catch (err) {
-    console.error('[DB FATAL] Could not initialize database schema:', err.message);
-    throw err;
+  let retries = 4;
+  while (retries > 0) {
+    try {
+      const schemaPath = path.join(__dirname, 'schema.sql');
+      const sql = fs.readFileSync(schemaPath, 'utf8');
+      await pool.query(sql);
+      console.log('[DB] Database schema initialized successfully');
+      return;
+    } catch (err) {
+      retries--;
+      if (retries === 0) {
+        console.error('[DB FATAL] Could not initialize database schema:', err.message);
+        throw err;
+      }
+      console.warn(`[DB] Connection retry (${4 - retries}/4) due to: ${err.message}`);
+      await new Promise((r) => setTimeout(r, 1200));
+    }
   }
 }
 
