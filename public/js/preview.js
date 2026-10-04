@@ -24,6 +24,13 @@ const previewState = {
   }
 };
 
+const driveState = {
+  currentFolderId: 'root',
+  currentFolder: { id: 'root', name: 'My Drive', parentId: null },
+  searchQuery: '',
+  isSearching: false
+};
+
 function esc(s) {
   return String(s || '').replace(/[&<>"]/g, function(c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -74,6 +81,8 @@ function switchTab(tabKey) {
     refreshCalendar();
   } else if (tabKey === 'rem') {
     refreshReminders();
+  } else if (tabKey === 'drive') {
+    refreshDrive();
   }
 }
 
@@ -133,6 +142,38 @@ async function refreshReminders(newId = null) {
           previewState.lastNewReminderId = null;
         }
       }, 2500);
+    }
+  }
+}
+
+/**
+ * Fetch and refresh Google Drive files and folders.
+ * @param {string} [folderId] - Optional folder ID to navigate to
+ */
+async function refreshDrive(folderId = null) {
+  if (folderId !== null && folderId !== undefined) {
+    driveState.currentFolderId = folderId;
+    driveState.searchQuery = '';
+    driveState.isSearching = false;
+  }
+
+  try {
+    if (driveState.isSearching && driveState.searchQuery) {
+      const res = await window.api.get(`/api/drive/search?q=${encodeURIComponent(driveState.searchQuery)}`);
+      previewState.data.drive = (res && res.files) || [];
+    } else {
+      const res = await window.api.get(`/api/drive/list?folderId=${encodeURIComponent(driveState.currentFolderId || 'root')}`);
+      previewState.data.drive = (res && res.files) || [];
+      driveState.currentFolder = (res && res.folder) || { id: 'root', name: 'My Drive', parentId: null };
+    }
+  } catch (err) {
+    console.warn('[DRIVE] Unable to load Drive explorer:', err.message);
+  } finally {
+    if (previewState.activeTab === 'drive') {
+      renderView();
+    }
+    if (window.upload && window.upload.loadDestinationFolders) {
+      window.upload.loadDestinationFolders();
     }
   }
 }
@@ -211,6 +252,91 @@ function renderRemindersView(reminders) {
 }
 
 /**
+ * Render Drive explorer: search box, breadcrumbs, upload area, and files/folders.
+ */
+function renderDriveView(files) {
+  let html = '';
+
+  // 1. Search Bar
+  html += `
+    <div class="drive-search-bar">
+      <input id="drive-search-input" value="${esc(driveState.searchQuery)}" placeholder="Search files and content in Drive…">
+      <button class="b" id="drive-search-btn">Search</button>
+      ${driveState.isSearching ? '<button class="b alt" id="drive-clear-search-btn">Show all files</button>' : ''}
+    </div>
+  `;
+
+  // 2. Breadcrumbs
+  if (driveState.isSearching) {
+    html += `<p class="path">Drive / search results for “${esc(driveState.searchQuery)}”</p>`;
+  } else {
+    const isRoot = !driveState.currentFolderId || driveState.currentFolderId === 'root';
+    if (isRoot) {
+      html += '<p class="path">Drive / My Drive</p>';
+    } else {
+      const parentId = driveState.currentFolder.parentId || 'root';
+      html += `<p class="path"><button class="lnk" data-nav-folder="${esc(parentId)}" style="margin-right: 6px;">‹ Back</button> Drive / <b>${esc(driveState.currentFolder.name)}</b></p>`;
+    }
+  }
+
+  // 3. Upload Area
+  html += `
+    <div class="drive-upload-box" id="drive-upload-box">
+      <div class="ph" style="padding: 0 0 6px 0; border: none;">// UPLOAD DOCUMENT</div>
+      <div class="drive-upload-row">
+        <label class="b alt" style="cursor: pointer; margin: 0;">
+          Choose file
+          <input type="file" id="drive-file-input" style="display: none;">
+        </label>
+        <span id="drive-selected-file-label" style="color: var(--dim); font-size: 12px;">No file chosen</span>
+      </div>
+      <div class="drive-upload-row">
+        <span style="color: var(--dim); font-size: 12px;">Destination:</span>
+        <select id="drive-folder-select" class="drive-select"></select>
+        <div id="drive-new-folder-wrap" style="display: none;">
+          <input id="drive-new-folder-input" class="drive-input" placeholder="New folder name…">
+        </div>
+        <button class="b" id="drive-upload-btn" style="margin-left: auto;">Upload to Drive</button>
+      </div>
+      <div class="bar" id="drive-upload-progress" style="display: none;"><i></i></div>
+      <div id="drive-upload-status" class="upload-status" style="display: none;"></div>
+    </div>
+  `;
+
+  // 4. File and Folder Items
+  if (!files || files.length === 0) {
+    html += '<div class="empty">No matching files or folders.</div>';
+    return html;
+  }
+
+  // Render Folders first, then files
+  files.forEach((f) => {
+    if (f.isFolder) {
+      html += `
+        <div class="row">
+          <span class="tag">FOLDER</span>
+          <b><button class="lnk" data-folder-id="${esc(f.id)}" style="font-weight: 700; font-size: 13px; border: none; padding: 0; background: none; color: var(--g);">📁 ${esc(f.name)}</button></b>
+          <span></span>
+          <small>${f.modifiedTime ? 'modified ' + fmtDay(new Date(f.modifiedTime)) : ''}</small>
+        </div>
+      `;
+    } else {
+      const ext = (f.name.split('.').pop() || 'FILE').toUpperCase();
+      html += `
+        <div class="row">
+          <span class="tag">${esc(ext)}</span>
+          <b>${esc(f.name)}</b>
+          ${f.webViewLink ? `<a href="${esc(f.webViewLink)}" target="_blank" rel="noopener noreferrer" class="lnk">Open</a>` : '<span></span>'}
+          <small>${f.folderName ? esc(f.folderName) + ' · ' : ''}${f.modifiedTime ? 'modified ' + fmtDay(new Date(f.modifiedTime)) : ''}${f.size ? ' · ' + Math.round(f.size / 1024) + ' KB' : ''}</small>
+        </div>
+      `;
+    }
+  });
+
+  return html;
+}
+
+/**
  * Render the content for the currently active tab.
  */
 function renderView() {
@@ -229,14 +355,19 @@ function renderView() {
     return;
   }
 
+  if (currentTab === 'drive') {
+    viewEl.innerHTML = renderDriveView(previewState.data.drive);
+    if (window.upload && window.upload.loadDestinationFolders) {
+      window.upload.loadDestinationFolders();
+    }
+    return;
+  }
+
   const items = previewState.data[currentTab] || [];
 
   if (items.length === 0) {
     let emptyMsg = 'No records found.';
     switch (currentTab) {
-      case 'drive':
-        emptyMsg = 'No files in Drive.';
-        break;
       case 'comms':
         emptyMsg = 'No messages sent yet.';
         break;
@@ -265,31 +396,115 @@ function setTabData(tabKey, items) {
   }
 }
 
-// Global click delegation for reminder dismissal
+// Global click delegation for reminders and drive browsing
 document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('button[data-dismiss]');
-  if (!btn) return;
+  // Reminder dismissal
+  const dismissBtn = e.target.closest('button[data-dismiss]');
+  if (dismissBtn) {
+    const reminderId = dismissBtn.dataset.dismiss;
+    dismissBtn.disabled = true;
 
-  const reminderId = btn.dataset.dismiss;
-  btn.disabled = true;
+    try {
+      await window.api.post(`/api/reminders/${reminderId}/dismiss`);
+      if (window.chat && window.chat.showToast) {
+        window.chat.showToast('Reminder dismissed');
+      }
+      refreshReminders();
+    } catch (err) {
+      console.error('Failed to dismiss reminder:', err);
+      if (window.chat && window.chat.showToast) {
+        window.chat.showToast(`Error: ${err.message}`);
+      }
+      dismissBtn.disabled = false;
+    }
+    return;
+  }
 
-  try {
-    await window.api.post(`/api/reminders/${reminderId}/dismiss`);
-    if (window.chat && window.chat.showToast) {
-      window.chat.showToast('Reminder dismissed');
+  // Folder navigation (entering a folder)
+  const folderBtn = e.target.closest('button[data-folder-id]');
+  if (folderBtn) {
+    const fId = folderBtn.dataset.folderId;
+    refreshDrive(fId);
+    return;
+  }
+
+  // Breadcrumbs back navigation
+  const backNavBtn = e.target.closest('button[data-nav-folder]');
+  if (backNavBtn) {
+    const parentId = backNavBtn.dataset.navFolder;
+    refreshDrive(parentId);
+    return;
+  }
+
+  // Drive search trigger
+  const searchBtn = e.target.closest('#drive-search-btn');
+  if (searchBtn) {
+    const input = document.querySelector('#drive-search-input');
+    if (input) {
+      driveState.searchQuery = input.value.trim();
+      driveState.isSearching = true;
+      refreshDrive();
     }
-    refreshReminders();
-  } catch (err) {
-    console.error('Failed to dismiss reminder:', err);
-    if (window.chat && window.chat.showToast) {
-      window.chat.showToast(`Error: ${err.message}`);
+    return;
+  }
+
+  // Clear search results
+  const clearBtn = e.target.closest('#drive-clear-search-btn');
+  if (clearBtn) {
+    driveState.searchQuery = '';
+    driveState.isSearching = false;
+    refreshDrive();
+    return;
+  }
+});
+
+// Drive search input Enter key handler
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target && e.target.id === 'drive-search-input') {
+    driveState.searchQuery = e.target.value.trim();
+    driveState.isSearching = true;
+    refreshDrive();
+  }
+});
+
+// Drag and drop support on Drive upload box
+document.addEventListener('dragover', (e) => {
+  const box = e.target.closest('#drive-upload-box');
+  if (box) {
+    e.preventDefault();
+    box.classList.add('dragover');
+  }
+});
+
+document.addEventListener('dragleave', (e) => {
+  const box = e.target.closest('#drive-upload-box');
+  if (box) {
+    box.classList.remove('dragover');
+  }
+});
+
+document.addEventListener('drop', (e) => {
+  const box = e.target.closest('#drive-upload-box');
+  if (box) {
+    e.preventDefault();
+    box.classList.remove('dragover');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const fileInput = document.querySelector('#drive-file-input');
+      if (fileInput) {
+        fileInput.files = e.dataTransfer.files;
+      }
+      const label = document.querySelector('#drive-selected-file-label');
+      if (label) {
+        label.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+      }
     }
-    btn.disabled = false;
   }
 });
 
 window.refreshCalendar = refreshCalendar;
 window.refreshReminders = refreshReminders;
+window.refreshDrive = refreshDrive;
 window.preview = {
   renderTabs,
   switchTab,
@@ -297,5 +512,6 @@ window.preview = {
   setTabData,
   refreshCalendar,
   refreshReminders,
+  refreshDrive,
   getActiveTab: () => previewState.activeTab
 };

@@ -90,6 +90,10 @@ app.use(calendarRoutes);
 const remindersRoutes = require('./routes/reminders');
 app.use(remindersRoutes);
 
+// Google Drive routes
+const driveRoutes = require('./routes/drive');
+app.use(driveRoutes);
+
 // Live Server-Sent Events stream
 const { router: eventsRouter } = require('./routes/events');
 app.use(eventsRouter);

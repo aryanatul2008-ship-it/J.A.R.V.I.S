@@ -606,6 +606,77 @@ button, a.b {
   backdrop-filter: blur(4px);
 }
 
+/* Drive Explorer & Upload UI */
+.drive-search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.drive-search-bar input {
+  flex: 1;
+  min-width: 0;
+  background: #010a0e;
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  min-height: 40px;
+}
+
+.drive-upload-box {
+  background: rgba(2, 20, 27, 0.7);
+  border: 1px dashed var(--line);
+  padding: 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drive-upload-box.dragover {
+  border-color: var(--g);
+  background: rgba(31, 214, 240, 0.08);
+}
+
+.drive-upload-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.drive-select, .drive-input {
+  background: #010a0e;
+  border: 1px solid var(--line);
+  color: var(--bone);
+  padding: 8px 12px;
+  min-height: 40px;
+  font: inherit;
+}
+
+.upload-status {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-left: 3px solid transparent;
+}
+
+.upload-status.success {
+  background: rgba(31, 214, 240, 0.1);
+  border-color: var(--g);
+  color: var(--ok);
+}
+
+.upload-status.error {
+  background: rgba(255, 107, 107, 0.1);
+  border-color: var(--err);
+  color: #ffc9c9;
+}
+
+.upload-status.info {
+  background: rgba(242, 193, 78, 0.1);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
 /* HUD Background & Holo Icon */
 .hud {
   position: fixed;
