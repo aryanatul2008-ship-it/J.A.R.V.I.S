@@ -49,12 +49,17 @@ async function checkAuth() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('view') === 'app' || params.get('mock') === '1') {
     setAuthState(true, { name: 'Commander (Preview Mode)' });
+    if (window.refreshCalendar) window.refreshCalendar();
     return;
   }
 
   try {
     const user = await window.api.get('/api/me');
     setAuthState(true, user);
+
+    if (window.refreshCalendar) {
+      window.refreshCalendar();
+    }
 
     // Sync browser timezone with user profile
     const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;

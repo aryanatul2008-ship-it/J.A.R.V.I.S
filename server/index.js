@@ -82,6 +82,10 @@ app.get('/api/health', (req, res) => {
 const authRoutes = require('./routes/auth');
 app.use(authRoutes);
 
+// Calendar integration routes
+const calendarRoutes = require('./routes/calendar');
+app.use(calendarRoutes);
+
 // Auth status endpoint for client bootstrapping
 app.get('/api/auth/status', (req, res) => {
   if (req.session && req.session.userId) {
