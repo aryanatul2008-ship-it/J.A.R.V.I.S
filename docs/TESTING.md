@@ -228,6 +228,89 @@ This document details the complete end-to-end testing procedures for J.A.R.V.I.S
 
 ---
 
+### 14. Voice Command Input & Auto-Send
+- **Objective:** Verify speech-to-text recognition, interim transcript rendering, wake word cleanup, and automatic command dispatch.
+- **Steps:**
+  1. Click the round cyan microphone button next to the command input.
+  2. Observe microphone button pulses with cyan glow and header indicator changes to `JARVIS LISTENING`.
+  3. Speak clearly: `"Hey Jarvis, schedule a team sync tomorrow at 3 PM"`.
+- **Expected Outcome:**
+  - Live interim transcript displays in the input field as you speak.
+  - On pause/completion, the transcript is cleaned: leading `"Hey Jarvis"` is stripped, first letter is capitalized: `"Schedule a team sync tomorrow at 3 PM"`.
+  - With "Auto-send" toggle enabled (default), the command submits automatically through `window.queue.submit`.
+  - Mic button and status indicator return to normal idle state.
+
+---
+
+### 15. Keyboard Shortcut (Ctrl+M) & Manual Stop
+- **Objective:** Toggle voice listening state via keyboard shortcut and verify early stopping.
+- **Steps:**
+  1. Press `Ctrl+M` (or `Cmd+M` on macOS).
+  2. Confirm listening starts (placeholder switches to `"Listening…"`).
+  3. Press `Ctrl+M` again (or click the microphone button).
+- **Expected Outcome:**
+  - Recognition terminates immediately.
+  - Placeholder restores to `"Give JARVIS a command…"`.
+  - Status indicator returns to `JARVIS ONLINE`.
+
+---
+
+### 16. Spoken Replies (Text-to-Speech)
+- **Objective:** Verify auditory feedback for JARVIS's final response messages.
+- **Steps:**
+  1. Click the **"SPOKEN REPLIES: OFF"** chip in the voice toolbar to turn it **ON** (`🔊 SPOKEN REPLIES: ON`).
+  2. Submit command: `"What is the status of the arc reactor?"`.
+  3. Listen to the audio output.
+- **Expected Outcome:**
+  - JARVIS speaks the final reply using an English male voice at rate 1.0, pitch 0.9.
+  - Step lines, tool calls, and error codes are NOT read out aloud.
+  - If the reply exceeds two sentences, only the first two sentences are spoken.
+  - While JARVIS is speaking, speech recognition is held inactive to prevent acoustic feedback loops.
+
+---
+
+### 17. Voice Confirmation for Telegram Actions
+- **Objective:** Confirm consequential actions using spoken voice commands.
+- **Steps:**
+  1. Submit: `"Send Bruce a Telegram message saying Lab calibration is complete"`.
+  2. Wait for the confirmation card to render in the console.
+  3. Notice the card displays: `Voice: Say 'confirm' or 'cancel'`.
+  4. Press `Ctrl+M` and say: `"Confirm"` (or `"Send it"`).
+- **Expected Outcome:**
+  - The voice controller detects the short confirmation phrase and triggers the card's `[Send]` button.
+  - The message is transmitted via Telegram and card turns into `✓ TRANSMISSION CONFIRMED & SENT`.
+  - If the user says `"Cancel"`, the card cancels transmission.
+  - Spoken sentences longer than two words do not trigger accidental confirmation.
+
+---
+
+### 18. Hands-Free Mode & Silence Timeout
+- **Objective:** Verify continuous wake-word listening and automatic 60-second deactivation.
+- **Steps:**
+  1. Click **"HANDS-FREE: OFF"** to turn it **ON** (`HANDS-FREE: ON`).
+  2. Observe the green pulsing indicator: `● LISTENING (SAY "JARVIS…")`.
+  3. Speak background chatter without saying the wake word (e.g. `"The weather is nice today"`).
+  4. Observe the command is ignored and not submitted.
+  5. Say: `"Jarvis, what do I have scheduled for tomorrow?"`.
+  6. Observe the command executes and, once complete, hands-free mode automatically resumes listening.
+  7. Remain silent for 60 seconds (or switch browser tabs).
+- **Expected Outcome:**
+  - After 60 seconds of silence or upon tab hide, hands-free mode automatically deactivates with a notification: `"Hands-free mode deactivated after 60 seconds of silence, sir."`.
+
+---
+
+### 19. Speech Recognition Error Handling & Fallback
+- **Objective:** Gracefully handle microphone denial, disconnection, and unsupported environments.
+- **Steps:**
+  1. Deny microphone access in browser site permissions.
+  2. Click the microphone button.
+- **Expected Outcome:**
+  - Console prints: `⚠ Microphone access is blocked. Allow it in the browser's site settings.`.
+  - Microphone button resets immediately and does not freeze the UI.
+  - In unsupported browsers (e.g. Firefox), the mic button is hidden and `"Voice input needs Chrome or Edge."` is displayed.
+
+---
+
 ## Accessibility & Responsive Verification Results
 
 | Dimension / Requirement | Standard | Status | Verification Note |
@@ -237,6 +320,8 @@ This document details the complete end-to-end testing procedures for J.A.R.V.I.S
 | **Desktop (1280px)** | 2-Column Split Screen | PASS | Synchronized Console and Live Preview panels side-by-side |
 | **Touch Targets** | Buttons & tabs ≥ 40px | PASS | Explicit `min-height: 40px` and inline-flex alignment on all buttons/tabs/inputs |
 | **Focus Outlines** | Visible `:focus-visible` | PASS | High-contrast `outline: 2px solid var(--ok)` with 2px offset |
-| **ARIA Live** | `#log` announcements | PASS | `aria-live="polite"` configured on console container |
-| **Reduced Motion** | `@media (prefers-reduced-motion)` | PASS | Disables CSS animations and all SVG `<animateTransform>` tags |
-| **Input Labels** | Form accessibility | PASS | All inputs, selects, and buttons have explicit `aria-label`s |
+| **ARIA Live** | `#log` & `#voice-announcer` | PASS | `aria-live="polite"` configured on console and dedicated voice announcer |
+| **Reduced Motion** | `@media (prefers-reduced-motion)` | PASS | Disables CSS animations, mic pulse ring, and SVG `<animateTransform>` tags |
+| **Input Labels** | Form accessibility | PASS | All inputs, selects, mic button, and toggles have explicit `aria-label`s |
+| **Voice Confirmation** | Consequential safety | PASS | Never bypasses confirmation; matches only strict 1–2 word confirm/cancel |
+

@@ -52,6 +52,11 @@ function submit(raw) {
   const text = (raw || '').trim();
   if (!text) return;
 
+  // Stop active speech synthesis when a new command is issued
+  if (window.voice && window.voice.stopSpeaking) {
+    window.voice.stopSpeaking();
+  }
+
   // Clear input field without blocking or disabling it
   const inputEl = document.querySelector('#in');
   if (inputEl) {

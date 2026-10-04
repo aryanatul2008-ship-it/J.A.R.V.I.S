@@ -48,18 +48,21 @@ function formatMessage(raw) {
 
 /**
  * Update the JARVIS status indicator.
- * @param {'online' | 'processing' | 'offline'} state
+ * @param {'online' | 'processing' | 'offline' | 'listening'} state
  */
 function setStatus(state) {
   const st = document.querySelector('#st');
   const stt = document.querySelector('#stt');
   if (!st || !stt) return;
 
-  st.classList.remove('busy', 'offline');
+  st.classList.remove('busy', 'offline', 'listening');
 
   if (state === 'processing') {
     st.classList.add('busy');
     stt.textContent = 'JARVIS PROCESSING';
+  } else if (state === 'listening') {
+    st.classList.add('listening');
+    stt.textContent = 'JARVIS LISTENING';
   } else if (state === 'offline') {
     st.classList.add('offline');
     stt.textContent = 'JARVIS OFFLINE';
@@ -280,6 +283,7 @@ function renderConfirmationCard(actionId, recipient, message) {
         <button class="b" data-confirm-action="${actionId}">Send</button>
         <button class="b alt" data-cancel-action="${actionId}">Cancel</button>
       </div>
+      <div class="action-card-voice-hint">Say 'confirm' or 'cancel'</div>
     </div>
   `;
 
@@ -339,6 +343,9 @@ function handleEvent(event, userCommandText) {
   } else if (event.type === 'message') {
     chatHistory.push({ role: 'model', text: event.text });
     addMessage('j', formatMessage(event.text));
+    if (window.voice && window.voice.speakReply) {
+      window.voice.speakReply(event.text);
+    }
   } else if (event.type === 'error') {
     const friendly = window.getFriendlyError ? window.getFriendlyError(event.code, event.message) : {
       title: 'ERROR',
@@ -360,6 +367,11 @@ function handleEvent(event, userCommandText) {
  * @returns {Promise<boolean>}
  */
 async function streamCommand(text, signal) {
+  // Stop any ongoing speech playback when a new command begins
+  if (window.voice && window.voice.stopSpeaking) {
+    window.voice.stopSpeaking();
+  }
+
   addMessage('u', esc(text));
   chatHistory.push({ role: 'user', text });
 
