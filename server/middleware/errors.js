@@ -8,6 +8,14 @@ const config = require('../config');
  * Global API error handling middleware.
  */
 function errorHandler(err, req, res, next) {
+  // Convert expired Google OAuth errors to standardized 401 response
+  if (err.code === 'auth_expired' || (err.message && err.message.toLowerCase().includes('auth_expired'))) {
+    return res.status(401).json({
+      code: 'auth_expired',
+      message: 'Google authorization expired. Please reconnect.'
+    });
+  }
+
   const status = err.status || err.statusCode || 500;
   const code = err.code || (status === 500 ? 'internal_error' : 'request_error');
   const message = err.message || 'An unexpected server error occurred';

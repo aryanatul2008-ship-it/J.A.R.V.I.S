@@ -89,11 +89,21 @@
         </div>
       </div>
       <span id="clock"></span>
+      <div id="user-profile" style="display: none; align-items: center; gap: 8px;">
+        <span id="user-name" style="color: var(--ok); font-size: 12px; font-weight: 500;"></span>
+        <button id="logout-btn" class="b alt" style="min-height: 36px; padding: 2px 10px; font-size: 11px;">LOG OUT</button>
+      </div>
       <div class="st" id="st">
         <span class="dot"></span>
         <span id="stt">JARVIS ONLINE</span>
       </div>
     </header>
+
+    <!-- Reconnect Google Banner when token expires -->
+    <div id="auth-expired-banner" class="banner" style="display: none;">
+      <span>⚠ Google authorization expired. Calendar & Drive access paused.</span>
+      <a href="/auth/google" class="b auth-btn" style="min-height: 34px; padding: 4px 12px; font-size: 11px; width: auto;">RECONNECT GOOGLE</a>
+    </div>
 
     <!-- Integrations Bar -->
     <div class="integ" id="integ"></div>

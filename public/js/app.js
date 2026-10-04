@@ -11,43 +11,60 @@ const QUICK_CHIPS = [
   ['Combo: 3 actions', 'JARVIS, schedule the Stark team meeting for tomorrow at 6 PM, remind me 30 minutes before it, and send Bruce a Telegram message about it']
 ];
 
+let currentUser = null;
+
 /**
  * Switch page visibility between Logged Out and Logged In views.
  * @param {boolean} isLoggedIn
+ * @param {object} [user]
  */
-function setAuthState(isLoggedIn) {
+function setAuthState(isLoggedIn, user = null) {
   const authView = document.querySelector('#auth-view');
   const mainView = document.querySelector('#main-view');
+  const userProfile = document.querySelector('#user-profile');
+  const userNameEl = document.querySelector('#user-name');
+  const authBanner = document.querySelector('#auth-expired-banner');
+
+  currentUser = user;
 
   if (isLoggedIn) {
     if (authView) authView.style.display = 'none';
     if (mainView) mainView.style.display = 'grid';
+    if (userProfile) userProfile.style.display = 'flex';
+    if (userNameEl && user) {
+      userNameEl.textContent = user.name || user.email || 'Tony Stark';
+    }
   } else {
     if (authView) authView.style.display = 'flex';
     if (mainView) mainView.style.display = 'none';
+    if (userProfile) userProfile.style.display = 'none';
+    if (authBanner) authBanner.style.display = 'none';
   }
 }
 
 /**
- * Check authentication status with the server.
+ * Check authentication status and fetch profile via /api/me.
  */
 async function checkAuth() {
-  // Allow manual query param ?view=app or ?mock=1 to inspect command centre
   const params = new URLSearchParams(window.location.search);
   if (params.get('view') === 'app' || params.get('mock') === '1') {
-    setAuthState(true);
+    setAuthState(true, { name: 'Commander (Preview Mode)' });
     return;
   }
 
   try {
-    const data = await window.api.get('/api/auth/status');
-    if (data && data.authenticated) {
-      setAuthState(true);
-    } else {
-      setAuthState(false);
+    const user = await window.api.get('/api/me');
+    setAuthState(true, user);
+
+    // Sync browser timezone with user profile
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (browserTimezone && browserTimezone !== user.timezone) {
+      window.api.post('/api/me/timezone', { timezone: browserTimezone }).catch((err) => {
+        console.warn('[TIMEZONE] Could not sync browser timezone:', err.message);
+      });
     }
   } catch (err) {
-    // Default to logged out state if server returns 401 or is starting up
+    // 401 or network error defaults to logged-out boot screen
     setAuthState(false);
   }
 }
@@ -63,7 +80,7 @@ function renderIntegrations() {
     <button class="chip unknown" data-k="cal"><i></i>CALENDAR · UNKNOWN</button>
     <button class="chip unknown" data-k="drive"><i></i>DRIVE · UNKNOWN</button>
     <button class="chip unknown" data-k="tg"><i></i>TELEGRAM · UNKNOWN</button>
-    <span class="hint">Service link states (live status will be synced from server)</span>
+    <span class="hint">Service link states (live status synced from server)</span>
   `;
 }
 
@@ -176,18 +193,40 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Handle Logout Button
+  const logoutBtn = document.querySelector('#logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        await window.api.post('/auth/logout');
+        setAuthState(false);
+        if (window.chat && window.chat.showToast) {
+          window.chat.showToast('Logged out successfully');
+        }
+      } catch (err) {
+        console.error('Logout failed:', err);
+        setAuthState(false);
+      }
+    });
+  }
+
   // Handle global auth-expired event
   window.addEventListener('auth-expired', () => {
-    setAuthState(false);
+    const banner = document.querySelector('#auth-expired-banner');
+    if (banner) {
+      banner.style.display = 'flex';
+    }
+    window.chat.setStatus('offline');
+    window.chat.addMessage('e', '⚠ Google authorization expired. Please click "Reconnect Google" above.');
     if (window.chat && window.chat.showToast) {
-      window.chat.showToast('Session expired. Please reconnect Google.');
+      window.chat.showToast('Google authorization expired. Reconnect required.');
     }
   });
 
   // Initial welcome message in console
-  window.chat.addMessage('j', 'Stark Command Centre initialized. Awaiting your command.');
+  window.chat.addMessage('j', 'Stark Command Centre online. Awaiting your command.');
 
-  // Check initial authentication
+  // Check initial authentication state
   checkAuth();
 });
 

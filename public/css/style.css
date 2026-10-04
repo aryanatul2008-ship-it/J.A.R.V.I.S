@@ -590,6 +590,22 @@ button, a.b {
   text-align: center;
 }
 
+/* Auth Reconnect Warning Banner */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin: 10px 0;
+  background: rgba(255, 107, 107, 0.16);
+  border: 1px solid var(--err);
+  color: #ffc9c9;
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+}
+
 /* HUD Background & Holo Icon */
 .hud {
   position: fixed;

@@ -78,17 +78,16 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
+// Authentication and profile routes
+const authRoutes = require('./routes/auth');
+app.use(authRoutes);
+
 // Auth status endpoint for client bootstrapping
 app.get('/api/auth/status', (req, res) => {
   if (req.session && req.session.userId) {
-    return res.json({ authenticated: true, user: req.session.user || { id: req.session.userId } });
+    return res.json({ authenticated: true, userId: req.session.userId });
   }
   return res.json({ authenticated: false });
-});
-
-// OAuth initiation route placeholder
-app.get('/auth/google', (req, res) => {
-  res.status(501).send('Google OAuth authentication flow will be connected in subsequent steps.');
 });
 
 // 404 handler for undefined API routes
